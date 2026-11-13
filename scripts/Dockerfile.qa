@@ -1,0 +1,10 @@
+FROM node:24 AS browser-runtime
+RUN apt-get update && apt-get install -y --no-install-recommends chromium fonts-liberation poppler-utils
+FROM browser-runtime AS runner
+WORKDIR /qa
+ENV CHROMIUM_PATH=/usr/bin/chromium
+ENV ARTIFACT_DIR=/artifacts
+COPY tests/package*.json ./
+RUN npm install --no-audit --no-fund
+COPY tests/ ./
+CMD ["npm", "test"]

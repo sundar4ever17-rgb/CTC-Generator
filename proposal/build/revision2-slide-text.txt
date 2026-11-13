@@ -1,0 +1,298 @@
+
+1. Project Overview
+Brakes India can progress from demo to production.
+Automated CTC Generator & Compensation Structuring System
+
+10-week baseline  |  INR 13,80,000 planning budget
+Revision 2 | 13 November 2026
+[Presenter]
+
+Proposal agenda
+Review scope, delivery, cost and release decisions.
+
+Estimate
+2
+
+Scope and demo reuse
+
+Timeline, resources and cost
+
+Acceptance, release and support
+
+Detailed phase estimates
+
+2. Existing Demo Application
+The demo already supports the core offer workflow.
+
+Demo review
+3
+Available
+Production work
+Calculations and PDFs
+Approve policies/templates
+Inputs and revisions
+Validate client scenarios
+Masters and access
+Confirm production controls
+Local deployment
+Production setup
+
+3. Proposed Development Scope
+Production retains the URD’s five groups and 20 components.
+
+URD
+4
+
+Gross drives equal groups without circular formulas.
+
+Invalid balances block CTC and offer output.
+
+Qualification, grade and policy govern allowances.
+
+5. Project Deliverables
+Delivery includes working software, test evidence and operational handover.
+
+Scope
+5
+
+Application, source and configured masters
+
+Approved CTC and offer PDFs
+
+Test evidence and signed UAT results
+
+Release instructions and HR/C&B walkthrough
+
+6. Estimated Development Timeline
+Parallel delivery targets go-live in 10 weeks.
+
+Estimate
+6
+Confirm
+
+
+W1
+Build
+
+
+W2–6
+Test
+
+
+W4–7
+UAT
+
+
+W8–9
+Go-live
+
+
+W9–10
+Planning window: 10–12 weeks
+
+Estimation basis
+Effort pricing uses a transparent blended rate.
+
+Estimate
+7
+Role
+Person-days
+Lead/analyst
+12
+Frontend
+23
+Backend/database
+31
+QA
+20
+DevOps
+8
+INR 12,000/day  |  8 hours/day  |  INR 1,500/hour
+
+7. Project Cost
+The recommended planning budget is INR 13,80,000.
+
+Estimate
+8
+Cost element
+INR
+Delivery
+11,28,000
+90-day warranty
+72,000
+Base
+12,00,000
+Reserve (15%)
+1,80,000
+Planning budget
+13,80,000
+Excludes taxes, infrastructure and maintenance.
+
+8. Assumptions and Client Requirements
+Two UAT cycles must close before release approval.
+
+Acceptance
+9
+
+Policies and examples: Week 1.
+
+UAT: Weeks 8 and 9.
+
+Fix feedback; reconcile figures.
+
+Written sign-off; no critical/high defects.
+
+Deployment and Go-Live
+Production release requires operational and business verification.
+
+Release
+10
+
+Configure TLS, secrets, backups and logs.
+
+Load approved masters; verify access.
+
+Rehearse migration, restore and rollback.
+
+Verify calculations, PDFs and audit history.
+
+Post Go-Live Warranty
+The included warranty covers defects for 90 days.
+
+Warranty
+11
+
+Starts at production go-live.
+
+First two weeks: closer release support.
+
+6 person-days reserved; no client-hour cap.
+
+Accepted-scope defects; enhancements excluded.
+
+Post Go-Live Maintenance
+Maintenance provides a defined monthly support allowance.
+
+Support
+12
+Item
+Allowance / fee
+Monthly fee
+INR 24,000
+Included hours
+16
+12-month term
+INR 2,88,000
+Additional hour
+INR 1,500
+After warranty; business hours only.
+
+9. Conclusion
+Approve the baseline to schedule production delivery.
+
+Estimate
+13
+
+10–12 weeks  |  INR 13,80,000 planning budget
+Confirm policies, environments, reviewers and commercial terms.
+Taxes/infrastructure excluded; maintenance optional.
+
+Appendix: Phase estimates
+Initial development completes the reusable foundation.
+
+INR; days=person-days
+14
+Phase
+Window
+Days
+Cost
+P1 Requirements
+W1
+8
+96,000
+P2 Frontend
+W2–4
+10
+1,20,000
+P3 Backend
+W2–5
+10
+1,20,000
+P4 Database
+W2–3
+6
+72,000
+
+Appendix: Phase estimates
+Rules, documents and internal testing establish release quality.
+
+INR; days=person-days
+15
+Phase
+Window
+Days
+Cost
+P5 Salary logic
+W3–6
+14
+1,68,000
+P6 PDFs
+W5–6
+6
+72,000
+P7 Testing
+W4–7
+12
+1,44,000
+P8 Fixes/regression
+W6–7
+8
+96,000
+
+Appendix: Phase estimates
+Acceptance, deployment and handover complete the delivery effort.
+
+INR; days=person-days
+16
+Phase
+Window
+Days
+Cost
+P9 UAT
+W8–9
+8
+96,000
+P10 Deployment
+W9–10
+7
+84,000
+P11 Coordination
+W1–10
+5
+60,000
+Delivery total: 94 days / INR 11,28,000
+
+4. Key Features and Functionalities | Appendix
+Gross fixes targets before balancing.
+
+URD
+17
+
+Inclusion = Exclusion = Gross/2
+Special Allowance = Gross/2 − Basic − Professional Allowance
+HRA (uncapped) = Gross/2 − Conveyance − PF − NPS − Superannuation
+
+Appendix: PF/NPS
+PF and NPS follow the supplied URD rules.
+
+URD
+18
+Condition
+PF
+Basic > 25,000
+12% × Basic
+Otherwise: half-Inclusion ≤25,000
+12% × half-Inclusion
+Otherwise
+3,000
+INR. NPS: New 14% / Old 10% of Basic; opt-out 0.

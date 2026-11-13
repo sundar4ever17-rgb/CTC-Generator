@@ -1,0 +1,47 @@
+{
+  "pages": 3,
+  "sections_verified": [
+    "1. Project Overview",
+    "2. Existing Demo Application",
+    "3. Proposed Development Scope",
+    "4. Key Features and Functionalities",
+    "5. Project Deliverables",
+    "6. Estimated Development Timeline",
+    "7. Project Cost",
+    "8. Assumptions and Client Requirements",
+    "9. Conclusion"
+  ],
+  "content_snippets_verified": 77,
+  "word_tables": 5,
+  "pdf_words": 1015,
+  "pages_content": [
+    {
+      "page": 1,
+      "words": 329,
+      "sections": [
+        "1. Project Overview",
+        "2. Existing Demo Application",
+        "3. Proposed Development Scope"
+      ]
+    },
+    {
+      "page": 2,
+      "words": 374,
+      "sections": [
+        "4. Key Features and Functionalities",
+        "5. Project Deliverables"
+      ]
+    },
+    {
+      "page": 3,
+      "words": 312,
+      "sections": [
+        "6. Estimated Development Timeline",
+        "7. Project Cost",
+        "8. Assumptions and Client Requirements",
+        "9. Conclusion"
+      ]
+    }
+  ],
+  "placeholders_verified": true
+}

@@ -1,0 +1,11 @@
+{
+  "name": "ctc-generator-acceptance",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node api.mjs && node browser.mjs",
+    "test:api": "node api.mjs",
+    "test:browser": "node browser.mjs"
+  },
+  "dependencies": { "playwright-core": "1.65.0" }
+}

@@ -1,0 +1,68 @@
+{
+  "title": "Project Proposal",
+  "subtitle": "CTC Generator | Production Application",
+  "metadata": "Prepared for: [Client name]    |    Prepared by: [Company / name]    |    Date: [Proposal date]",
+  "overview": "Develop the existing CTC Generator demo into a production application for preparing accurate, consistent CTC breakups and offer letters. The application will replace manual spreadsheets with a controlled, single-screen workflow for HR and Compensation & Benefits (C&B), following the supplied User Requirement Document (URD).",
+  "demo_intro": "The working demo provides the foundation below. Its sample salary values come from the URD illustration and are not an approved production grade matrix.",
+  "demo_headers": ["Area", "Available in the demo", "Required for production"],
+  "demo_rows": [
+    ["Calculation", "Sequential calculations; five groups and 20 components; live balance checks and validation.", "Configure approved client rules and verify results against approved manual calculations."],
+    ["HR workflow", "Candidate inputs, grade and location selection, qualification, tax regime, NPS choice, and saved revisions.", "Confirm Basic selection and calculation conventions; complete client acceptance testing."],
+    ["Master data and access", "Versioned configuration, role-based access, and audit history.", "Load approved matrices and policies; confirm HR/C&B editing responsibilities and access."],
+    ["CTC and offer PDFs", "Draft previews and PDF generation with final-output validation controls.", "Apply the official offer template and approved details; validate final documents."],
+    ["Deployment", "Local application with persistent data storage.", "Prepare and validate deployment in the agreed production environment."]
+  ],
+  "demo_note": "The main demo uses watermarked drafts while policy details remain unresolved. Final-document workflows have been exercised with test data; this does not establish client policy approval or production acceptance.",
+  "scope": "Build on the existing application: complete the URD rules using approved client data; resolve the identified calculation and access decisions; apply the approved document template; test calculations, permissions and outputs; and prepare production deployment and handover. Configuration of grades, slabs, percentages and ceilings will remain available to authorised users without code changes.",
+  "scope_exclusions": "Outside this release: payroll, payslips, HRMS/ATS integration, month-wise tax calculations, investment declarations, and CTC-target reverse calculation.",
+  "feature_intro": "Retain all five URD groups and their 20 components:",
+  "component_headers": ["Group", "Components"],
+  "component_rows": [
+    ["Inclusion Wages", "Basic; Professional Allowance; Special Allowance."],
+    ["Exclusion Wages", "HRA; Conveyance; Employer PF; NPS; Superannuation."],
+    ["Statutory Payments", "Employer ESI; Gratuity; Annual Special Allowance (classification to be confirmed)."],
+    ["Policy-Based Payments", "6th Day Allowance; Field Service Allowance; Relocation; Deputation; Additional HRA."],
+    ["Variable Pay", "Annual Performance Pay; Additional Annual Performance Pay; Long Term Merit 1; Long Term Merit 2."]
+  ],
+  "rules_headers": ["Requirement", "Business rule to retain and validate"],
+  "rules_rows": [
+    ["Gross and balance", "Monthly Gross is the input. Inclusion = Exclusion = Gross / 2. Calculate targets, Inclusion fixed values, Exclusion fixed values, Special Allowance, then HRA, without circular formulas."],
+    ["Balancing amounts", "Special Allowance = Gross / 2 - Basic - Professional Allowance. HRA = Gross / 2 - Conveyance - Employer PF - NPS - Superannuation, with no Basic-based cap. Block output for unequal totals or negative balancing amounts."],
+    ["Grade and qualification", "Validate Basic against grade limits; apply grade-based Conveyance caps. Professional Allowance applies only to CA, CMA or CS qualifications using the approved slab."],
+    ["Employer PF", "If Basic > INR 25,000: 12% of Basic. Otherwise, if 50% of Inclusion <= INR 25,000: 12% of that amount. Otherwise: INR 3,000."],
+    ["NPS and statutory rules", "NPS: 14% of Basic under New Regime or 10% under Old Regime, only when opted in; otherwise zero. URD rates: Employer ESI 3.25% within the applicable wage limit; Gratuity 4.81% of Inclusion. Keep rates and ceilings configurable."],
+    ["Other payments and CTC", "Apply approved Superannuation, annual allowance, conditional policy payments and grade-based variable-pay schedules. CTC adds Statutory, Policy-Based and Variable Pay to Gross using confirmed periods. Employer PF, NPS and Superannuation are already within Gross."],
+    ["Documents and traceability", "Show the same approved figures in the CTC sheet and offer PDF. Retain inputs, rule versions and outputs for audit, with role-based editing controls."]
+  ],
+  "deliverables": [
+    "Production application and source code covering the agreed URD scope.",
+    "Approved master configuration, CTC Breakup Sheet and Offer Letter PDF templates.",
+    "Calculation and workflow test evidence, with client user acceptance testing (UAT) sign-off.",
+    "Deployment setup, configuration/handover notes and a short HR/C&B walkthrough."
+  ],
+  "timeline_intro": "No development estimate was supplied. Durations and dates will be agreed after the pending client inputs and scope decisions are confirmed.",
+  "timeline_headers": ["Phase", "Main outcome", "Duration"],
+  "timeline_rows": [
+    ["Requirements confirmation", "Approved rules, access decisions and template", "[To be confirmed]"],
+    ["Development and configuration", "Completed URD scope with client master data", "[To be confirmed]"],
+    ["Testing and client UAT", "Verified calculations, documents and sign-off", "[To be confirmed]"],
+    ["Deployment and handover", "Agreed production release and walkthrough", "[To be confirmed]"]
+  ],
+  "timeline_total": "Total duration: [To be confirmed]    |    Start date: [To be agreed]    |    Go-live: [To be agreed]",
+  "cost_intro": "No commercial estimate was supplied. The quotation will be finalised after scope and client inputs are confirmed.",
+  "cost_headers": ["Commercial item", "Details"],
+  "cost_rows": [
+    ["Total project cost", "[Currency] [Amount]"],
+    ["Applicable taxes / charges", "[To be confirmed]"],
+    ["Payment terms", "[To be agreed]"]
+  ],
+  "assumptions": [
+    "Client to provide the approved grade matrix: Basic ranges, Conveyance caps, Professional Allowance slabs and Variable Pay bands/schedules.",
+    "Client to supply Superannuation rules; ESI wage ceiling and basis; Annual Special Allowance slabs/classification; and eligibility, amounts and periods for policy payments.",
+    "Client to confirm Basic selection, rounding to the rupee, annualisation and payment-period conventions; Finance/Tax to confirm acceptance of uncapped HRA.",
+    "Client to provide the official offer wording, company details, required candidate/employment fields and signatory details.",
+    "Client to confirm HR/C&B edit rights, provide authorised reviewers, approved calculation examples, production environment access and UAT sign-off. Missing policies will not be treated as zero or inferred from demo/test data."
+  ],
+  "conclusion": "The existing demo provides a practical foundation for the production CTC Generator. The proposed work will complete the client configuration, validate the URD calculations and documents, and prepare the application for operational use. Development dates and commercial terms remain subject to agreement.",
+  "basis": "Proposal basis: supplied five-page CTC Generator URD; demo README; requirements, implementation-decisions and verification documents."
+}

@@ -1,0 +1,48 @@
+﻿name: ctc-generator
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ctc
+      POSTGRES_USER: ctc
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ctc_demo_local_only}
+    ports:
+      - "127.0.0.1:5442:5432"
+    volumes:
+      - ctc_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ctc -d ctc"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  backend:
+    build:
+      context: ./backend
+    environment:
+      APP_ENV: demo
+      PORT: "8080"
+      DATABASE_URL: postgres://ctc:${POSTGRES_PASSWORD:-ctc_demo_local_only}@db:5432/ctc?sslmode=disable
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-DemoCTC!2026}
+      APP_ORIGIN: http://localhost:3020
+      ALLOWED_ORIGIN: http://localhost:3020
+      CHROME_BIN: /usr/bin/chromium
+    ports:
+      - "127.0.0.1:8088:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    shm_size: 256mb
+    init: true
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      API_INTERNAL_URL: http://backend:8080
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      - "127.0.0.1:3020:3000"
+    depends_on:
+      - backend
+    init: true
+volumes:
+  ctc_pgdata:

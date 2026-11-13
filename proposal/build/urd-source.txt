@@ -1,0 +1,250 @@
+                                              User Requirement Document (URD)
+                      Automated CTC (Cost to Company) Generator & Compensation Structuring System
+
+1. Executive Summary
+This document defines the functional, structural and computational requirements for an enterprise CTC Generator that will replace
+the current manual spreadsheets and macro-based calculators used for offer preparation.
+The system will organise every compensation element into five groups: Inclusion Wages, Exclusion Wages, Statutory Payments,
+Policy-Based Payments and Variable Pay. It will enforce the following business rules automatically:
+    •   Exact parity between the Inclusion and Exclusion groups.
+    •   Qualification-based gating of the Professional Allowance.
+    •   Grade- and location-driven allowances.
+    •   Provident Fund (PF) logic with ceiling tiers.
+    •   optional, tax-regime-dependent NPS calculation.
+The objective is an accurate, audit-ready and standardised process for generating CTC breakups and offer letters, with manual
+calculation risk removed.
+
+2. Objectives and Scope
+
+2.1 Objectives
+    •   Replace error-prone spreadsheet and macro calculators with a single controlled tool.
+    •   Standardise offer generation across grades and locations.
+    •   Guarantee that every CTC breakup balances exactly and follows statutory rules.
+    •   Provide a clear audit trail of inputs, rules applied and outputs.
+
+2.2 In Scope
+    •   Candidate profile and tax-regime inputs.
+    •   Grade-, location- and qualification-driven component configuration.
+    •   Sequential (non-circular) calculation engine.
+    •   Live parity check between Inclusion and Exclusion groups.
+    •   Output of the CTC Breakup Sheet and Offer Letter (PDF).
+
+2.3 Out of Scope (for this release)
+    •   Payroll processing and payslip generation.
+    •   Integration with HRMS/ATS (to be considered in a later phase).
+    •   Month-wise tax computation and investment declarations.
+
+3. Salary Component Structure
+All compensation elements must be grouped into five structural categories.
+
+#         Group             Components                                                          Primary driver
+
+1         Inclusion         Basic; Professional Allowance (conditional); Special Allowance      Grade matrix, qualification,
+          Wages             (balancing plug)                                                    system calculation
+
+2         Exclusion         HRA (balancing plug); Conveyance; Employer PF (conditional);        System calculation, grade,
+          Wages             NPS (optional, regime-dependent); Superannuation                    statutory rule, tax regime
+
+3         Statutory         ESI (Employer); Gratuity; Annual Special Allowance                  Statutory rule, policy and grade
+          Payments
+#            Group            Components                                                           Primary driver
+
+4            Policy-Based     6th Day Allowance; Field Service Allowance; Relocation; Job parameters, site conditions,
+             Payments         Deputation; Additional HRA                              posting
+
+5            Variable Pay     Annual Performance Pay; Additional Annual Performance Pay; Grade / level
+                              Long Term Merit 1; Long Term Merit 2
+
+
+4. Core Calculation Rules
+
+4.1 Mandatory Parity Constraint
+The total of the Inclusion Wages Group must exactly equal the total of the Exclusion Wages Group:
+Inclusion Wages Group = Exclusion Wages Group
+Together, the two groups make up monthly Gross Wages. Gross is the primary input and is split equally, so each group equals
+Gross ÷ 2 (for example, a Gross of ₹1,00,000 gives ₹50,000 in each group). The system must not allow a CTC to be generated if
+the two totals differ.
+
+4.2 Gross-Driven Sequential Calculation
+Monthly Gross is entered first, which fixes both group totals before any component is calculated. Special Allowance then balances
+the Inclusion group and HRA balances the Exclusion group. Because the Inclusion total is known up front (Gross ÷ 2), Employer PF
+can be calculated directly with no circular dependency. CTC is treated as an output (Gross plus Statutory, Policy-Based and
+Variable Pay); a CTC-target mode is deferred to a later phase.
+Required implementation: the engine must run in a strict, step-by-step sequence and must not rely on live circular formulas.
+    1.      Input. Gross is entered; Inclusion target = Exclusion target = Gross ÷ 2.
+    2.      Inclusion fixed values. Set Basic (within the grade range) and Professional Allowance (if qualified).
+    3.      Exclusion fixed values. Compute Conveyance, Employer PF, NPS (zero if not opted in) and Superannuation.
+    4.      Special Allowance. Balance the Inclusion group.
+    5.      HRA. Balance the Exclusion group.
+Special Allowance = (Gross ÷ 2) − Basic − Professional Allowance
+HRA = (Gross ÷ 2) − Conveyance − Employer PF − NPS − Superannuation
+HRA is not capped at a percentage of Basic. The system should raise an error if either balancing plug turns out negative.
+
+4.3 Component Calculation Logic
+Group                   Component               Calculation logic and governing rule                          Driven by
+
+Inclusion               Basic Salary            Validated against a min–max range per grade (e.g., Junior Grade matrix
+                                                Engineer: ₹7,000 – ₹12,000 per month).
+
+Inclusion               Professional            Enabled only if the candidate holds a recognised Candidate
+                        Allowance               professional qualification (CA, CMA, CS). Defaults to a pre- qualification
+                                                defined slab.
+
+Inclusion               Special Allowance       Balancing plug of the Inclusion group: (Gross ÷ 2) − Basic System calculation
+                                                − Professional Allowance.
+Exclusion               HRA                     Balancing plug of the Exclusion group: (Gross ÷ 2) − System calculation
+                                                Conveyance − Employer PF − NPS − Superannuation. No
+                                                cap relative to Basic.
+Group                   Component                   Calculation logic and governing rule                        Driven by
+
+Exclusion               Conveyance                  Flat amount capped by grade (e.g., Junior Engineer: Grade matrix
+                                                    ₹7,300 per month).
+
+Exclusion               Employer PF                 See rule 4.4 below.                                         Salary structure /
+                                                                                                                Inclusion Wages
+
+
+Exclusion               NPS                         Optional. If the employee opts in: 14% of Basic (New Tax NPS opt-in and tax
+                                                    Regime) or 10% of Basic (Old Tax Regime). If not opted in, regime selection
+                                                    NPS is zero and HRA remains the balancing figure.
+
+
+Exclusion               Superannuation              Standard company policy percentage, where applicable.       Policy / grade
+
+
+Statutory               ESI (Employer)              3.25%, applied automatically when gross wages fall within Statutory rule
+                                                    the statutory limit.
+Statutory               Gratuity                    4.81% of Inclusion wages.                                   Statutory rule
+Statutory               Annual             Special Defined annual payout slab.                                  Policy and grade
+                        Allowance
+
+Policy-based            6th    Day,    Field Conditional additions triggered by job parameters, site Parameter-driven
+                        Service, Relocation, conditions or relocation postings.
+                        Deputation,
+                        Additional HRA
+
+Variable                Annual Performance Long-term incentive schedules and annual performance Grade / level
+                        Pay,      Additional percentages tied to grade bands.
+                        Performance     Pay,
+                        LTM 1, LTM 2
+
+
+4.4 Employer PF Decision Logic
+Condition                                                                    Employer PF
+Basic > ₹25,000                                                              Basic × 12%
+
+Basic ≤ ₹25,000 and 50% of Total Inclusion Wages ≤ ₹25,000                   (50% of Inclusion Wages) × 12%
+
+
+Basic ≤ ₹25,000 and 50% of Total Inclusion Wages > ₹25,000                   ₹25,000 × 12% (capped at ₹3,000)
+
+
+
+4.5 Worked Example (Illustrative)
+The example shows the sequence for a Gross of ₹1,00,000 per month. Basic (₹20,000), Conveyance (₹7,300), the New Tax
+Regime, NPS opted in and no Superannuation are assumed for illustration only.
+
+Step        Component                        Calculation                                                ₹ per month
+1           Inclusion / Exclusion target     1,00,000 ÷ 2                                               50,000 each
+Step     Component                    Calculation                                                 ₹ per month
+
+2        Basic                        Entered within grade range                                  20,000
+
+3        Professional Allowance       Candidate not qualified                                     0
+
+4        Conveyance                   Grade cap                                                   7,300
+5        Employer PF                  Basic ≤ 25,000; 50% of Inclusion = 25,000; 25,000 × 12%     3,000
+
+
+6        NPS                          14% of Basic (New Regime, opted in)                         2,800
+
+7        Special Allowance            50,000 − 20,000 − 0                                         30,000
+
+8        HRA                          50,000 − 7,300 − 3,000 − 2,800                              36,900
+
+9        Parity check                 Inclusion 20,000 + 0 + 30,000; Exclusion 36,900 + 7,300 + 50,000 = 50,000
+                                      3,000 + 2,800
+
+HRA works out to 184.5% of Basic in this example. That is permitted, because HRA carries no percentage cap. If the employee
+does not opt in to NPS, NPS is zero and HRA becomes ₹39,700.
+
+5. User Workflow and UI Specifications
+
+5.1 Candidate Profile and Tax Input
+The user selects:
+    •   Monthly Gross Wages
+    •   Candidate Grade
+    •   Job Location
+    •   Professional Qualification
+    •   Tax Regime (Old or New) and NPS opt-in (Yes or No)
+
+5.2 Dynamic Slabs and Sequential Engine Execution
+    •   Gross is split equally into the Inclusion and Exclusion targets.
+    •   Basic salary ranges and allowances populate automatically per grade.
+    •   Professional Allowance locks or opens based on the qualification selected.
+    •   Conveyance, PF and NPS compute through the sequential pipeline.
+    •   Special Allowance and HRA balance their groups automatically.
+
+5.3 Parity Check Indicator
+A live visual indicator displays Inclusion Group Total vs. Exclusion Group Total and confirms absolute balance. Generation of
+outputs is blocked if the totals do not match.
+
+5.4 Output Generation
+The system generates:
+    •   A structured CTC Breakup Sheet showing all five component sections.
+    •   An Offer Letter (PDF) reflecting the same figures.
+6. Functional Requirements Summary
+ID              Requirement                                                                                       Priority
+
+FR-01           Group all components into the five defined categories.                                            High
+
+FR-02           Validate Basic against the grade-wise min–max range.                                              High
+
+FR-03           Enable Professional Allowance only for CA, CMA or CS qualifications.                              High
+
+FR-04           Calculate HRA as the balancing plug of the Exclusion group, with no cap relative to Basic.        High
+FR-05           Apply the three-tier Employer PF logic with ceiling.                                              High
+
+FR-06           Treat NPS as optional: apply 14% (New Regime) or 10% (Old Regime) of Basic only if opted          High
+                in, otherwise zero.
+
+FR-07           Calculate Special Allowance as the balancing plug of the Inclusion group.                         High
+
+FR-08           Take monthly Gross as the primary input, set Inclusion = Exclusion = Gross ÷ 2, and enforce       High
+                parity before output.
+
+FR-09           Execute calculations in the fixed sequential order, with no circular formulas.                    High
+
+FR-10           Apply ESI and Gratuity automatically per statutory rules.                                         High
+
+FR-11           Add Policy-Based Payments conditionally from job parameters.                                      Medium
+
+FR-12           Compute Variable Pay by grade band.                                                               Medium
+
+FR-13           Generate the CTC Breakup Sheet and Offer Letter PDF.                                              High
+
+FR-14           Keep a log of inputs, rules applied and outputs for audit.                                        Medium
+
+
+7. Non-Functional Requirements
+     •   Accuracy: results must match approved manual calculations to the rupee.
+     •   Configurability: grade matrices, slabs, percentages and statutory ceilings must be maintainable by authorised HR users
+         without code changes.
+     •   Auditability: every generated CTC must be traceable to its inputs and the rule versions used.
+     •   Access control: role-based access, with edit rights limited to Compensation & Benefits.
+     •   Usability: a single-screen workflow that a non-technical HR user can complete without training beyond a short
+         walkthrough.
+
+8. Assumptions and Open Items for Confirmation
+     •   The ESI wage ceiling and statutory rates (ESI 3.25%, Gratuity 4.81%) must be kept configurable, since statutory limits can
+         change.
+     •   Superannuation percentages by grade are to be supplied by Compensation & Benefits.
+     •   Annual Special Allowance is listed under Statutory Payments in this draft; its classification should be confirmed, as it is a
+         policy-driven payout slab.
+     •   The grade matrix (Basic ranges, Conveyance caps, Professional Allowance slabs, Variable Pay bands) will be provided as
+         a master data annexure.
+     •   How Basic is set within the grade range (entered by the user, or defaulted as a share of Gross) is to be confirmed.
+     •   Finance / Tax should confirm that an uncapped HRA is acceptable, as the HRA tax exemption is limited under the Old Tax
+         Regime.
+     •   A CTC-target mode (entering a CTC and solving back to Gross) is deferred; confirm whether it is needed in a later phase.
+

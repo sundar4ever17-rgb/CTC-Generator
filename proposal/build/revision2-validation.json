@@ -1,0 +1,12 @@
+{
+  "document_pages": 5,
+  "sections_verified": 9,
+  "source_blocks_verified": 119,
+  "arithmetic_verified": true,
+  "stale_placeholders": false,
+  "document_words": 2184,
+  "slides": 18,
+  "render_missing_text": [],
+  "cross_format_phase_rows_verified": 11,
+  "native_tables": 8
+}

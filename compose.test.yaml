@@ -1,0 +1,29 @@
+﻿services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ctc_test
+      POSTGRES_USER: ctc
+      POSTGRES_PASSWORD: ctc_test_only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ctc -d ctc_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  backend:
+    image: ctc-generator-backend
+    environment:
+      APP_ENV: demo
+      PORT: "8080"
+      DATABASE_URL: postgres://ctc:ctc_test_only@db:5432/ctc_test?sslmode=disable
+      DEMO_PASSWORD: DemoCTC!2026
+      APP_ORIGIN: http://localhost:3020
+      ALLOWED_ORIGIN: http://localhost:3020
+      CHROME_BIN: /usr/bin/chromium
+    ports:
+      - "127.0.0.1:8090:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    shm_size: 256mb
+    init: true

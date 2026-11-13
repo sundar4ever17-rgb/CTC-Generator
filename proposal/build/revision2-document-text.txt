@@ -1,0 +1,334 @@
+BRAKES INDIA  /  CTC GENERATOR PROPOSAL
+CTC Generator | Project Proposal
+1
+Project Proposal & Estimation
+Automated CTC Generator & Compensation Structuring System
+Prepared for: Brakes India    |    Prepared by: [Company / name]
+Revision 2 | 13 November 2026
+Delivery window
+Planning budget
+Included warranty
+10–12 weeks
+INR 13,80,000
+90 calendar days
+Budget includes contingency; applicable taxes, infrastructure and optional maintenance are extra.
+1. Project Overview
+Develop the existing demo into a production application for Brakes India to prepare consistent CTC 
+breakups and offer letters. This proposal covers requirements confirmation, UI and backend completion, 
+database preparation, salary rules, testing, client acceptance, deployment and go-live. The estimate credits 
+the existing implementation and covers the remaining production work; previous demo development is not 
+charged again.
+Basis: the supplied five-page URD, existing demo source and documentation, and the requested estimation and support 
+updates. All amounts are proposed planning estimates, subject to confirmation of the stated assumptions at the end of Week 
+1.
+2. Existing Demo Application
+Area
+Available in the demo
+Required for production
+Calculation
+Sequential calculations; five groups and 20 
+components; live balance checks and 
+validation.
+Configure approved client rules and verify results 
+against approved manual calculations.
+HR workflow
+Candidate inputs, grade and location 
+selection, qualification, tax regime, NPS 
+choice, and saved revisions.
+Confirm Basic selection and calculation 
+conventions; complete client acceptance testing.
+Master data and 
+access
+Versioned configuration, role-based access, 
+and audit history.
+Load approved matrices and policies; confirm 
+HR/C&B editing responsibilities and access.
+CTC and offer 
+PDFs
+Draft previews and PDF generation with final-
+output validation controls.
+Apply the official offer template and approved 
+details; validate final documents.
+Deployment
+Local application with persistent data 
+storage.
+Prepare and validate deployment in the agreed 
+production environment.
+The main demo uses the URD illustration and watermarked drafts. Prior local tests demonstrate working calculation and 
+document paths, including synthetic final-output tests; they are not Brakes India policy approval or production UAT.
+3. Proposed Development Scope
+Reuse the current Next.js, Go and PostgreSQL application. Complete agreed UI and API adjustments; load 
+approved client policies; resolve Basic, rounding and access decisions; finish Brakes India document templates; 
+establish controlled database releases; test the full workflow; and prepare production configuration, deployment 
+and handover.
+URD exclusions remain: payroll, payslips, HRMS/ATS integration, month-wise income-tax computation, investment 
+declarations and CTC-target reverse calculation. No new functional modules are included.
+
+BRAKES INDIA  /  CTC GENERATOR PROPOSAL
+CTC Generator | Project Proposal
+2
+4. Key Features and Functionalities
+Retain all five URD groups and their 20 components:
+Group
+Components
+Inclusion Wages
+Basic; Professional Allowance; Special Allowance.
+Exclusion Wages
+HRA; Conveyance; Employer PF; NPS; Superannuation.
+Statutory Payments
+Employer ESI; Gratuity; Annual Special Allowance (classification to be confirmed).
+Policy-Based 
+Payments
+6th Day Allowance; Field Service Allowance; Relocation; Deputation; Additional HRA.
+Variable Pay
+Annual Performance Pay; Additional Annual Performance Pay; Long Term Merit 1; 
+Long Term Merit 2.
+Business rules below follow the supplied URD; client-approved policy values and calculation conventions remain 
+prerequisites.
+Requirement
+Business rule to retain and validate
+Gross and balance
+Monthly Gross is the input. Inclusion = Exclusion = Gross / 2. Calculate targets, 
+Inclusion fixed values, Exclusion fixed values, Special Allowance, then HRA, without 
+circular formulas.
+Balancing amounts
+Special Allowance = Gross / 2 - Basic - Professional Allowance. HRA = Gross / 2 - 
+Conveyance - Employer PF - NPS - Superannuation, with no Basic-based cap. Block 
+output for unequal totals or negative balancing amounts.
+Grade and 
+qualification
+Validate Basic against grade limits; apply grade-based Conveyance caps. Professional 
+Allowance applies only to CA, CMA or CS qualifications using the approved slab.
+Employer PF
+If Basic > INR 25,000: 12% of Basic. Otherwise, if 50% of Inclusion <= INR 25,000: 
+12% of that amount. Otherwise: INR 3,000.
+NPS and statutory 
+rules
+NPS: 14% of Basic under New Regime or 10% under Old Regime, only when opted in; 
+otherwise zero. URD rates: Employer ESI 3.25% within the applicable wage limit; 
+Gratuity 4.81% of Inclusion. Keep rates and ceilings configurable.
+Other payments 
+and CTC
+Apply approved Superannuation, annual allowance, conditional policy payments and 
+grade-based variable-pay schedules. CTC adds Statutory, Policy-Based and Variable 
+Pay to Gross using confirmed periods. Employer PF, NPS and Superannuation are 
+already within Gross.
+Documents and 
+traceability
+Show the same approved figures in the CTC sheet and offer PDF. Retain inputs, rule 
+versions and outputs for audit, with role-based editing controls.
+5. Project Deliverables
+Production application and source code covering the agreed URD scope.
+Approved, versioned salary masters and Brakes India CTC/offer PDF templates.
+Calculation reference results, internal test report, defect log and signed client UAT results.
+Database release scripts, deployment/rollback and backup instructions, release checklist and short HR/C&B 
+walkthrough.
+
+BRAKES INDIA  /  CTC GENERATOR PROPOSAL
+CTC Generator | Project Proposal
+3
+6. Estimated Development Timeline and Activities
+Baseline: 10 elapsed working weeks from kickoff, with a 10–12-week planning window including up to two weeks 
+of delivery contingency. A working week has five working days; holidays and client delays may move calendar 
+dates. Parallel phases must not be added as consecutive weeks.
+One person-day (PD) = eight hours of supplier effort. Costs below are in INR at 12,000/PD. Overlapping phases share 
+the delivery team.
+Work package and activities
+Timing
+PD
+Cost (INR)
+P1  Requirements and demo review
+Confirm policies, Basic/rounding choices, access rules, UI changes and 
+acceptance cases; approve the delivery baseline.
+1w
+W1
+8
+96,000
+P2  UI / frontend development
+Refine the existing candidate/configuration screens, Brakes India styling, 
+validation messages and responsive behaviour.
+3w
+W2–4
+10
+1,20,000
+P3  Backend development
+Complete agreed API changes; validate permissions, sessions, audit 
+history, error handling and document access.
+4w
+W2–5
+10
+1,20,000
+P4  Database and data preparation
+Create versioned migrations and rollback steps; map and validate one 
+approved master-data set and a correction pass.
+2w
+W2–3
+6
+72,000
+P5  Salary logic and configuration
+Configure all 20 components; complete agreed URD rule adjustments and 
+reconcile grade, qualification, PF, NPS and balance boundaries.
+4w
+W3–6
+14
+1,68,000
+P6  CTC / offer documents
+Apply one approved CTC format and one offer template; verify fields, 
+wording, figures, pagination and final-output checks.
+2w
+W5–6
+6
+72,000
+P7  Internal testing
+Run independent calculation, API, UI, permissions and PDF tests; check 
+dependencies, security configuration and agreed load behaviour.
+4w
+W4–7
+12
+1,44,000
+P8  Internal defect fixes / regression
+Fix defects raised by internal testing and repeat affected regression checks; 
+prepare the UAT release.
+2w
+W6–7
+8
+96,000
+P9  Client UAT and final approval
+Support two client test/feedback cycles, resolve in-scope UAT defects, 
+retest and obtain written business approval.
+2w
+W8–9
+8
+96,000
+P10  Production deployment / go-live
+Set up the agreed environment, TLS/secrets, backups and logs; load 
+approved masters; rehearse release/rollback; deploy and verify.
+2w
+W9–10
+7
+84,000
+P11  Coordination and handover
+Track decisions, prepare handover notes and walkthrough; deploy and 
+verify the UAT release in Week 7 using the included DevOps allowance.
+10w
+W1–10
+5
+60,000
+Total through production go-live
+10 weeks
+94
+11,28,000
+Delivery milestones
+End W1: Requirements, policies, estimate assumptions and acceptance cases approved.  |  End W7: Internal checks 
+passed; delivery team has deployed and verified the UAT release.  |  End W9: Two UAT cycles closed and written 
+client sign-off received.  |  End W10: Production deployed, final verification passed and handover complete.
+Development includes developer checks. P7 covers independent testing; P8 covers its fixes and regression. P9 includes 
+client-UAT fixes only. Coordination and the warranty provision are explicit; no extra management or warranty fee is added.
+
+BRAKES INDIA  /  CTC GENERATOR PROPOSAL
+CTC Generator | Project Proposal
+4
+7. Project Cost and Post Go-Live Support
+A proposed blended billing rate of INR 12,000 per person-day (8 hours), equivalent to INR 1,500/hour, is used for 
+all phases. It includes the mixed delivery roles and normal supplier overhead; it is not a salary rate, existing 
+vendor quote or Brakes India-approved price.
+Cost item
+Basis
+Amount (INR)
+Delivery through go-live
+94 PD
+11,28,000
+Included warranty provision
+6 PD
+72,000
+Base estimate
+100 PD
+12,00,000
+Uncertainty reserve
+15% of base
+1,80,000
+Recommended planning budget
+Base + reserve
+13,80,000
+The 15% reserve covers uncertainty in policy interpretation, UAT rework and environment preparation. It is a planning 
+allowance, not an automatic additional charge; use requires agreement. The two-week schedule buffer is covered by 
+this reserve, not charged as another phase.
+Team and effort assumptions
+Two engineers cover frontend and backend work during the build, supported by shared QA, lead/analyst and DevOps 
+capacity. They are allocated as needed, not five people full-time for ten weeks. Brakes India reviewer time is a client 
+dependency and is excluded from supplier person-days.
+Delivery allocation: Lead / analyst / coordination 12 PD; Frontend engineering 23 PD; Backend / database engineering 31 
+PD; QA 20 PD; DevOps 8 PD. Total: 94 PD. Warranty provision is additional to this allocation.
+7.1 Included warranty
+90 calendar days from production go-live, included in the base estimate. The first two weeks provide closer 
+release support within the same warranty period.
+Correct reproducible defects against the accepted scope and approved calculation results. The six-person-day 
+allowance is an internal cost provision, not a client hour cap or a separate charge for covered defects.
+New features, changed business policies requiring new logic, third-party outages and client-caused infrastructure changes 
+are outside defect warranty.
+7.2 Optional maintenance after warranty
+Service
+Proposed estimate
+Monthly maintenance
+INR 24,000 for up to 16 hours
+Full 12-month maintenance term
+INR 2,88,000
+Additional approved effort
+INR 1,500/hour
+Application incident investigation, routine dependency/security updates, release verification and configuration 
+assistance within existing functionality, within the included hours.
+Unused hours expire monthly. Additional work is estimated first and charged at INR 1,500/hour only after approval. 
+Major enhancements and new policy operations require a separate estimate.
+Proposed support window: Monday–Friday, 09:00–18:00 IST, excluding agreed holidays. Acknowledge critical production 
+blockers within four business hours and other requests within one business day. Resolution time depends on diagnosis; no 
+24×7 coverage is assumed. Confirm these service targets in the support agreement.
+All figures exclude applicable taxes, hosting/infrastructure consumption, domains, paid licences, external security certification 
+and optional maintenance. Production setup labour is included in P10. Brakes India provides or directly funds the agreed 
+environments. Payment milestones will be agreed in the commercial order.
+
+BRAKES INDIA  /  CTC GENERATOR PROPOSAL
+CTC Generator | Project Proposal
+5
+8. Assumptions and Client Requirements
+8.1 Client inputs and availability
+By the end of Week 1: approve the grade matrix, Basic ranges/selection, Conveyance caps, Professional Allowance 
+slabs, Variable Pay bands and LTM schedules.
+Confirm Superannuation, ESI wage ceiling/basis, Annual Special Allowance slabs/classification, policy-payment 
+eligibility/amounts/periods, rounding and annualisation. Finance/Tax confirms uncapped HRA.
+Supply the official Brakes India CTC/offer formats, required fields, signatory details, HR/C&B edit permissions and 
+approved manual calculation examples. Missing rules are not inferred from demo or test data.
+Nominate HR/C&B, Finance and IT decision-makers. Return consolidated decisions within two working days and 
+provide reviewers for two five-working-day UAT cycles in Weeks 8 and 9.
+Provide source access and deployment constraints at kickoff; ready the UAT environment by Week 7 and production 
+access before Week 9. Delayed inputs or approvals move dates and may require re-planning.
+8.2 Scope and environment assumptions
+One Brakes India organisation, an English web application, one CTC format and one offer template; retain the 
+existing technology stack and single-screen workflow.
+One UAT environment and one production environment. One clean, approved master-data set, one initial production 
+load and one correction pass are included; historical candidate/payroll migration is excluded.
+Policies fit the existing fixed, percentage, conditional and scheduled rule types, with bounded changes within the 
+URD. Final matrices, data volume, concurrency and retention requirements are confirmed in Week 1.
+Existing role-based login is retained. Corporate SSO, high availability/disaster-recovery infrastructure, external 
+integrations and independent penetration-test certification are not included; mandatory client IT requirements must 
+be assessed before baseline approval.
+8.3 Testing, UAT and final approval
+Internal tests cover all 20 components, grade/qualification boundaries, all PF branches, both NPS regimes/opt-out, 
+ESI eligibility, balancing failures, annual payments, permissions, saved revisions and matching PDFs.
+UAT cycle 1 validates real client scenarios; cycle 2 verifies consolidated feedback and fixes. Approved manual 
+results must match to the rupee using the agreed rounding convention.
+Release requires written HR/C&B acceptance, approved masters/template, no open critical or high-severity defects, 
+and an agreed disposition for any minor issues.
+8.4 Production setup and go-live verification
+Before release: validate production access, TLS/secrets, controlled database migrations, backup/restore, 
+logs/monitoring and rollback; remove demo credentials/data, load and reconcile approved masters and users. After 
+deployment: verify login and permissions, representative calculations, saved revisions, CTC/offer PDFs and audit 
+history; record joint business/IT go-live approval.
+9. Conclusion
+Plan for 10 weeks to production go-live, with a 10–12-week delivery window and a recommended budget of INR 
+13,80,000 including contingency and a 90-day defect warranty, excluding taxes and infrastructure. Optional 
+maintenance is INR 24,000/month after warranty. Confirm the pending policies, environment requirements and 
+commercial basis in Week 1 before fixing the delivery baseline.
+Sources: client URD; demo source, README, requirements, architecture and verification records. Effort estimates are engineering 
+judgement based on reuse and remaining work; previous demo test results are not current production certification.
+Rate reference only; the selected INR 1,500/hour is a proposed blended planning rate, not a supplier quotation. ITSolvez: Software 
+Development Hourly Rates in India (2026)
