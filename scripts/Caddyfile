@@ -1,0 +1,33 @@
+{
+	email {$ACME_EMAIL}
+	admin off
+}
+
+{$CTC_DOMAIN} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+	request_body {
+		max_size 1MB
+	}
+	# Do not enable request access logs: URLs can contain candidate search data.
+	handle /api/* {
+		reverse_proxy backend:8080 {
+			health_uri /api/health
+			health_interval 20s
+			health_timeout 3s
+			transport http {
+				response_header_timeout 90s
+			}
+		}
+	}
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

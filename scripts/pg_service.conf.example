@@ -1,0 +1,12 @@
+# Store the populated file outside version control with restrictive permissions.
+# Backup: use the dedicated read-only backup identity.
+# Restore: use a distinct schema-owner identity against a NEW empty database.
+[ctc]
+host=REPLACE_WITH_PRIVATE_DATABASE_DNS_NAME
+port=5432
+dbname=REPLACE_WITH_DATABASE_NAME
+user=REPLACE_WITH_DATABASE_ROLE
+password=REPLACE_WITH_SECRET_FROM_SECRET_MANAGER
+sslmode=verify-full
+sslrootcert=/run/secrets/postgres_ca
+connect_timeout=10

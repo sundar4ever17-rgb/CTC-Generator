@@ -8,43 +8,37 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
-	"log"
-	"net"
+	"log/slog"
+	"mime"
 	"net/http"
-	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"ctc/internal/engine"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type User struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Email  string `json:"email"`
-	Role   string `json:"role"`
-	Active bool   `json:"active"`
+	ID                 string `json:"id"`
+	Name               string `json:"name"`
+	Email              string `json:"email"`
+	Role               string `json:"role"`
+	Active             bool   `json:"active"`
+	MustChangePassword bool   `json:"mustChangePassword"`
 }
 type session struct {
 	User User
 	CSRF string
 }
-type limiterEntry struct {
-	Count int
-	Until time.Time
-}
 type App struct {
 	DB       *pgxpool.Pool
 	Origin   string
 	Demo     bool
-	mu       sync.Mutex
-	attempts map[string]limiterEntry
+	pdfSlots chan struct{}
 }
 type handler func(http.ResponseWriter, *http.Request, session)
 
@@ -72,12 +66,14 @@ func fail(w http.ResponseWriter, status int, msg string) {
 	JSON(w, status, map[string]string{"error": msg})
 }
 func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
-	if !strings.HasPrefix(strings.ToLower(r.Header.Get("Content-Type")), "application/json") {
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
 		fail(w, 415, "Content-Type must be application/json")
 		return false
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1024*1024)
 	d := json.NewDecoder(r.Body)
+	d.DisallowUnknownFields()
 	if e := d.Decode(v); e != nil {
 		fail(w, 400, "Invalid request: "+e.Error())
 		return false
@@ -90,7 +86,12 @@ func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 func (a *App) dbError(w http.ResponseWriter, e error) {
-	log.Printf("database operation failed: %v", e)
+	code := "unavailable"
+	var pgerr *pgconn.PgError
+	if errors.As(e, &pgerr) {
+		code = pgerr.Code
+	}
+	slog.Error("database operation failed", "code", code, "request_id", w.Header().Get("X-Request-ID"))
 	fail(w, 500, "The request could not be completed; please retry")
 }
 func (a *App) audit(ctx context.Context, actor, action, kind, id string, details any) error {
@@ -116,7 +117,10 @@ func (a *App) getSession(r *http.Request) (session, error) {
 	if e != nil {
 		return s, e
 	}
-	e = a.DB.QueryRow(r.Context(), `SELECT u.id,u.name,u.email,u.role,u.active,s.csrf_token FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active=true`, hash(c.Value)).Scan(&s.User.ID, &s.User.Name, &s.User.Email, &s.User.Role, &s.User.Active, &s.CSRF)
+	if len(c.Value) != 64 {
+		return s, pgx.ErrNoRows
+	}
+	e = a.DB.QueryRow(r.Context(), `UPDATE sessions s SET last_seen_at=now() FROM users u,application_settings p WHERE p.id=1 AND s.user_id=u.id AND s.token_hash=$1 AND s.expires_at>now() AND s.created_at>now()-make_interval(hours=>p.session_max_hours) AND s.last_seen_at>now()-make_interval(mins=>p.session_idle_minutes) AND u.active=true AND s.auth_version=u.auth_version RETURNING u.id,u.name,u.email,u.role,u.active,u.must_change_password,s.csrf_token`, hash(c.Value)).Scan(&s.User.ID, &s.User.Name, &s.User.Email, &s.User.Role, &s.User.Active, &s.User.MustChangePassword, &s.CSRF)
 	return s, e
 }
 func hasRole(role string, roles []string) bool {
@@ -136,6 +140,10 @@ func (a *App) protect(fn handler, roles ...string) http.HandlerFunc {
 		}
 		if len(roles) > 0 && !hasRole(s.User.Role, roles) {
 			fail(w, 403, "Your role does not permit this action")
+			return
+		}
+		if s.User.MustChangePassword && r.URL.Path != "/api/auth/me" && r.URL.Path != "/api/auth/logout" && r.URL.Path != "/api/auth/password" {
+			fail(w, 403, "Change your temporary password before continuing")
 			return
 		}
 		if r.Method != "GET" && r.Method != "HEAD" {
@@ -164,25 +172,40 @@ func (a *App) Handler() http.Handler {
 	}
 	m.HandleFunc("GET /api/health", health)
 	m.HandleFunc("GET /health", health)
+	m.HandleFunc("GET /api/live", func(w http.ResponseWriter, r *http.Request) { JSON(w, 200, map[string]string{"status": "ok"}) })
 	m.HandleFunc("POST /api/auth/login", a.login)
 	m.HandleFunc("GET /api/auth/me", a.protect(func(w http.ResponseWriter, r *http.Request, s session) {
 		JSON(w, 200, map[string]any{"user": s.User, "csrfToken": s.CSRF})
 	}))
 	m.HandleFunc("POST /api/auth/logout", a.protect(a.logout))
+	m.HandleFunc("POST /api/auth/password", a.protect(a.changePassword))
 	m.HandleFunc("GET /api/bootstrap", a.protect(a.bootstrap))
 	m.HandleFunc("GET /api/configurations", a.protect(a.listConfigs))
+	m.HandleFunc("GET /api/configurations/{id}", a.protect(a.getConfig))
 	m.HandleFunc("POST /api/configurations", a.protect(a.createConfig, "cb"))
 	m.HandleFunc("POST /api/configurations/{id}/publish", a.protect(a.publishConfig, "cb"))
 	m.HandleFunc("POST /api/calculate", a.protect(a.calculate, "hr", "cb", "admin"))
 	m.HandleFunc("GET /api/cases", a.protect(a.listCases))
 	m.HandleFunc("POST /api/cases", a.protect(a.saveCase, "hr", "cb", "admin"))
 	m.HandleFunc("GET /api/cases/{id}", a.protect(a.getCase))
+	m.HandleFunc("PATCH /api/cases/{id}/owner", a.protect(a.assignCase, "admin"))
 	m.HandleFunc("GET /api/revisions/{id}/documents/{kind}", a.protect(a.document))
 	m.HandleFunc("GET /api/users", a.protect(a.listUsers, "admin"))
 	m.HandleFunc("POST /api/users", a.protect(a.createUser, "admin"))
 	m.HandleFunc("PATCH /api/users/{id}", a.protect(a.updateUser, "admin"))
 	m.HandleFunc("GET /api/audit", a.protect(a.listAudit))
+	m.HandleFunc("GET /api/settings", a.protect(a.getSettings, "admin"))
+	m.HandleFunc("PATCH /api/settings", a.protect(a.updateSettings, "admin"))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		started := time.Now()
+		w.Header().Set("X-Request-ID", ID())
+		recorded := &responseStatus{ResponseWriter: w, status: 200}
+		w = recorded
+		defer func() {
+			if r.URL.Path != "/api/health" && r.URL.Path != "/health" && r.URL.Path != "/api/live" {
+				slog.Info("http_request", "request_id", w.Header().Get("X-Request-ID"), "method", r.Method, "route", r.Pattern, "status", recorded.status, "duration_ms", time.Since(started).Milliseconds())
+			}
+		}()
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "same-origin")
@@ -192,69 +215,12 @@ func (a *App) Handler() http.Handler {
 		}
 		defer func() {
 			if v := recover(); v != nil {
-				log.Printf("handler panic: %v", v)
+				slog.Error("handler panic", "request_id", w.Header().Get("X-Request-ID"))
 				fail(w, 500, "The request could not be completed")
 			}
 		}()
 		m.ServeHTTP(w, r)
 	})
-}
-func (a *App) login(w http.ResponseWriter, r *http.Request) {
-	if origin := r.Header.Get("Origin"); origin != "" && origin != a.Origin {
-		fail(w, 403, "Origin is not allowed")
-		return
-	}
-	var in struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
-	if !readJSON(w, r, &in) {
-		return
-	}
-	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
-	if ip == "" {
-		ip = r.RemoteAddr
-	}
-	a.mu.Lock()
-	if a.attempts == nil {
-		a.attempts = map[string]limiterEntry{}
-	}
-	entry := a.attempts[ip]
-	if time.Now().After(entry.Until) {
-		entry = limiterEntry{Until: time.Now().Add(time.Minute)}
-	}
-	entry.Count++
-	a.attempts[ip] = entry
-	a.mu.Unlock()
-	if entry.Count > 30 {
-		fail(w, 429, "Too many sign-in attempts; retry in one minute")
-		return
-	}
-	var u User
-	var passwordHash string
-	e := a.DB.QueryRow(r.Context(), "SELECT id,name,email,role,active,password_hash FROM users WHERE email=$1", strings.ToLower(strings.TrimSpace(in.Email))).Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.Active, &passwordHash)
-	if e != nil || !u.Active || bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(in.Password)) != nil {
-		fail(w, 401, "Invalid email or password")
-		return
-	}
-	raw := token()
-	csrf := token()
-	_, e = a.DB.Exec(r.Context(), "INSERT INTO sessions(token_hash,user_id,csrf_token,expires_at) VALUES($1,$2,$3,$4)", hash(raw), u.ID, csrf, time.Now().Add(8*time.Hour))
-	if e != nil {
-		a.dbError(w, e)
-		return
-	}
-	http.SetCookie(w, &http.Cookie{Name: "ctc_session", Value: raw, Path: "/", HttpOnly: true, Secure: !a.Demo, SameSite: http.SameSiteLaxMode, MaxAge: 28800})
-	_ = a.audit(r.Context(), u.ID, "auth.login", "user", u.ID, map[string]string{"result": "success"})
-	JSON(w, 200, map[string]any{"user": u, "csrfToken": csrf})
-}
-func (a *App) logout(w http.ResponseWriter, r *http.Request, s session) {
-	c, _ := r.Cookie("ctc_session")
-	if c != nil {
-		_, _ = a.DB.Exec(r.Context(), "DELETE FROM sessions WHERE token_hash=$1", hash(c.Value))
-	}
-	http.SetCookie(w, &http.Cookie{Name: "ctc_session", Path: "/", MaxAge: -1, HttpOnly: true, Secure: !a.Demo, SameSite: http.SameSiteLaxMode})
-	JSON(w, 200, map[string]bool{"ok": true})
 }
 func (a *App) bootstrap(w http.ResponseWriter, r *http.Request, s session) {
 	configs, e := a.configs(r.Context())
@@ -262,10 +228,10 @@ func (a *App) bootstrap(w http.ResponseWriter, r *http.Request, s session) {
 		a.dbError(w, e)
 		return
 	}
-	JSON(w, 200, map[string]any{"user": s.User, "csrfToken": s.CSRF, "configurations": configs, "components": engine.Components, "clarifications": engine.Clarifications})
+	JSON(w, 200, map[string]any{"user": s.User, "csrfToken": s.CSRF, "demo": a.Demo, "configurations": configs, "components": engine.Components, "clarifications": engine.Clarifications})
 }
 func (a *App) listUsers(w http.ResponseWriter, r *http.Request, s session) {
-	rows, e := a.DB.Query(r.Context(), "SELECT id,name,email,role,active FROM users ORDER BY name")
+	rows, e := a.DB.Query(r.Context(), "SELECT id,name,email,role,active,must_change_password FROM users ORDER BY name LIMIT 1000")
 	if e != nil {
 		a.dbError(w, e)
 		return
@@ -274,11 +240,15 @@ func (a *App) listUsers(w http.ResponseWriter, r *http.Request, s session) {
 	users := []User{}
 	for rows.Next() {
 		var u User
-		if e = rows.Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.Active); e != nil {
+		if e = rows.Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.Active, &u.MustChangePassword); e != nil {
 			a.dbError(w, e)
 			return
 		}
 		users = append(users, u)
+	}
+	if e = rows.Err(); e != nil {
+		a.dbError(w, e)
+		return
 	}
 	JSON(w, 200, users)
 }
@@ -296,23 +266,23 @@ func (a *App) createUser(w http.ResponseWriter, r *http.Request, s session) {
 	}
 	in.Email = strings.ToLower(strings.TrimSpace(in.Email))
 	in.Name = strings.TrimSpace(in.Name)
-	if in.Name == "" || !strings.Contains(in.Email, "@") || !validRole(in.Role) || !validPassword(in.Password) {
-		fail(w, 400, "Name, email, valid role and a 12-72 character password are required")
+	if in.Name == "" || len(in.Name) > 200 || !validEmail(in.Email) || (!a.Demo && strings.HasSuffix(in.Email, "@demo.local")) || !validRole(in.Role) || !a.passwordAllowed(in.Password) {
+		fail(w, 400, "Name, valid non-demo email, valid role and a unique password (15-72 bytes in production; 12-72 in demo) are required")
 		return
 	}
-	ph, e := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
+	ph, e := bcrypt.GenerateFromPassword([]byte(in.Password), 12)
 	if e != nil {
 		a.dbError(w, e)
 		return
 	}
-	u := User{ID(), in.Name, in.Email, in.Role, true}
+	u := User{ID: ID(), Name: in.Name, Email: in.Email, Role: in.Role, Active: true, MustChangePassword: !a.Demo}
 	tx, e := a.DB.Begin(r.Context())
 	if e != nil {
 		a.dbError(w, e)
 		return
 	}
 	defer tx.Rollback(r.Context())
-	_, e = tx.Exec(r.Context(), "INSERT INTO users(id,name,email,password_hash,role) VALUES($1,$2,$3,$4,$5)", u.ID, u.Name, u.Email, string(ph), u.Role)
+	_, e = tx.Exec(r.Context(), "INSERT INTO users(id,name,email,password_hash,role,must_change_password) VALUES($1,$2,$3,$4,$5,$6)", u.ID, u.Name, u.Email, string(ph), u.Role, u.MustChangePassword)
 	if e == nil {
 		e = auditTx(r.Context(), tx, s.User.ID, "user.create", "user", u.ID, map[string]string{"email": u.Email, "role": u.Role})
 	}
@@ -344,11 +314,11 @@ func (a *App) updateUser(w http.ResponseWriter, r *http.Request, s session) {
 		fail(w, 400, "Invalid role")
 		return
 	}
-	if in.Password != nil && !validPassword(*in.Password) {
-		fail(w, 400, "Password must contain 12-72 characters")
+	if in.Password != nil && !a.passwordAllowed(*in.Password) {
+		fail(w, 400, "Use a unique password of 15-72 bytes in production (12-72 in demo)")
 		return
 	}
-	if in.Name != nil && strings.TrimSpace(*in.Name) == "" {
+	if in.Name != nil && (strings.TrimSpace(*in.Name) == "" || len(*in.Name) > 200) {
 		fail(w, 400, "Name cannot be empty")
 		return
 	}
@@ -356,8 +326,18 @@ func (a *App) updateUser(w http.ResponseWriter, r *http.Request, s session) {
 		fail(w, 400, "You cannot deactivate or remove your own administrator role")
 		return
 	}
+	tx, e := a.DB.Begin(r.Context())
+	if e != nil {
+		a.dbError(w, e)
+		return
+	}
+	defer tx.Rollback(r.Context())
+	if _, e = tx.Exec(r.Context(), "SELECT pg_advisory_xact_lock(42900822)"); e != nil {
+		a.dbError(w, e)
+		return
+	}
 	var u User
-	e := a.DB.QueryRow(r.Context(), "SELECT id,name,email,role,active FROM users WHERE id=$1", id).Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.Active)
+	e = tx.QueryRow(r.Context(), "SELECT id,name,email,role,active,must_change_password FROM users WHERE id=$1 FOR UPDATE", id).Scan(&u.ID, &u.Name, &u.Email, &u.Role, &u.Active, &u.MustChangePassword)
 	if errors.Is(e, pgx.ErrNoRows) {
 		fail(w, 404, "User not found")
 		return
@@ -376,19 +356,28 @@ func (a *App) updateUser(w http.ResponseWriter, r *http.Request, s session) {
 	if in.Active != nil {
 		u.Active = *in.Active
 	}
-	tx, e := a.DB.Begin(r.Context())
-	if e != nil {
-		a.dbError(w, e)
-		return
+	if before.Role == "admin" && before.Active && (u.Role != "admin" || !u.Active) {
+		var admins int
+		if e = tx.QueryRow(r.Context(), "SELECT count(*) FROM users WHERE role='admin' AND active").Scan(&admins); e != nil {
+			a.dbError(w, e)
+			return
+		}
+		if admins <= 1 {
+			fail(w, 409, "At least one active administrator is required")
+			return
+		}
 	}
-	defer tx.Rollback(r.Context())
 	_, e = tx.Exec(r.Context(), "UPDATE users SET name=$2,role=$3,active=$4,updated_at=now() WHERE id=$1", id, u.Name, u.Role, u.Active)
 	if e == nil && in.Password != nil {
 		var ph []byte
-		ph, e = bcrypt.GenerateFromPassword([]byte(*in.Password), bcrypt.DefaultCost)
+		ph, e = bcrypt.GenerateFromPassword([]byte(*in.Password), 12)
 		if e == nil {
-			_, e = tx.Exec(r.Context(), "UPDATE users SET password_hash=$2 WHERE id=$1", id, string(ph))
+			u.MustChangePassword = !a.Demo
+			_, e = tx.Exec(r.Context(), "UPDATE users SET password_hash=$2,must_change_password=$3 WHERE id=$1", id, string(ph), u.MustChangePassword)
 		}
+	}
+	if e == nil && (in.Role != nil || in.Active != nil || in.Password != nil) {
+		_, e = tx.Exec(r.Context(), "UPDATE users SET auth_version=auth_version+1 WHERE id=$1", id)
 	}
 	if e == nil && (in.Role != nil || in.Active != nil || in.Password != nil) {
 		_, e = tx.Exec(r.Context(), "DELETE FROM sessions WHERE user_id=$1", id)
@@ -407,7 +396,16 @@ func (a *App) updateUser(w http.ResponseWriter, r *http.Request, s session) {
 	JSON(w, 200, u)
 }
 func (a *App) listAudit(w http.ResponseWriter, r *http.Request, s session) {
-	rows, e := a.DB.Query(r.Context(), `SELECT a.id,COALESCE(u.name,'System'),a.action,a.entity_type,a.entity_id,a.details,a.created_at FROM audit_events a LEFT JOIN users u ON u.id=a.actor_id WHERE ($1<>'hr' OR a.actor_id=$2) ORDER BY a.created_at DESC LIMIT 500`, s.User.Role, s.User.ID)
+	limit, offset, ok := pagination(w, r)
+	if !ok {
+		return
+	}
+	search := strings.TrimSpace(r.URL.Query().Get("q"))
+	if len(search) > 200 {
+		fail(w, 400, "Search must be at most 200 characters")
+		return
+	}
+	rows, e := a.DB.Query(r.Context(), `SELECT a.id,COALESCE(u.name,'System'),a.action,a.entity_type,a.entity_id,a.details,a.created_at FROM audit_events a LEFT JOIN users u ON u.id=a.actor_id WHERE ($1<>'hr' OR a.actor_id=$2) AND ($5='' OR position(lower($5) in lower(a.action || ' ' || a.entity_type || ' ' || COALESCE(u.name,'System')))>0) ORDER BY a.created_at DESC,a.id LIMIT $3 OFFSET $4`, s.User.Role, s.User.ID, limit, offset, search)
 	if e != nil {
 		a.dbError(w, e)
 		return
@@ -426,29 +424,9 @@ func (a *App) listAudit(w http.ResponseWriter, r *http.Request, s session) {
 		_ = json.Unmarshal(details, &d)
 		out = append(out, map[string]any{"id": id, "actorName": actor, "action": action, "entityType": kind, "entityId": eid, "details": d, "createdAt": at.Format(time.RFC3339)})
 	}
+	if e = rows.Err(); e != nil {
+		a.dbError(w, e)
+		return
+	}
 	JSON(w, 200, out)
-}
-func New(ctx context.Context) (*App, error) {
-	env := os.Getenv("APP_ENV")
-	if env != "demo" && env != "production" {
-		return nil, fmt.Errorf("APP_ENV must explicitly be demo or production")
-	}
-	url := os.Getenv("DATABASE_URL")
-	if url == "" {
-		return nil, fmt.Errorf("DATABASE_URL is required")
-	}
-	pool, e := pgxpool.New(ctx, url)
-	if e != nil {
-		return nil, e
-	}
-	origin := os.Getenv("APP_ORIGIN")
-	if origin == "" {
-		origin = "http://localhost:3020"
-	}
-	a := &App{DB: pool, Origin: strings.TrimSuffix(origin, "/"), Demo: env == "demo"}
-	if e = a.initialize(ctx); e != nil {
-		pool.Close()
-		return nil, e
-	}
-	return a, nil
 }

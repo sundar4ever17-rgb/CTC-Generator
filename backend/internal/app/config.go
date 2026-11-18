@@ -29,14 +29,6 @@ func (a *App) initialize(ctx context.Context) error {
 		return e
 	}
 	defer conn.Exec(context.Background(), "SELECT pg_advisory_unlock(42900821)")
-	if _, e = conn.Exec(ctx, schema); e != nil {
-		return fmt.Errorf("schema: %w", e)
-	}
-	for _, c := range engine.Components {
-		if _, e = conn.Exec(ctx, "INSERT INTO salary_components(code,name) VALUES($1,$2) ON CONFLICT DO NOTHING", c.Code, c.Name); e != nil {
-			return e
-		}
-	}
 	if a.Demo {
 		password := os.Getenv("DEMO_PASSWORD")
 		if password == "" {
@@ -65,28 +57,6 @@ func (a *App) initialize(ctx context.Context) error {
 				return e
 			}
 		}
-	} else {
-		var demoUsers int
-		if e = conn.QueryRow(ctx, "SELECT count(*) FROM users WHERE email LIKE '%@demo.local' AND active=true").Scan(&demoUsers); e != nil {
-			return e
-		}
-		if demoUsers > 0 {
-			return fmt.Errorf("production cannot start with active demo accounts")
-		}
-		email, password := os.Getenv("BOOTSTRAP_ADMIN_EMAIL"), os.Getenv("BOOTSTRAP_ADMIN_PASSWORD")
-		if email != "" && password != "" {
-			if !validPassword(password) || password == "DemoCTC!2026" {
-				return fmt.Errorf("a unique 12-72 character production bootstrap password is required")
-			}
-			ph, e := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-			if e != nil {
-				return e
-			}
-			_, e = conn.Exec(ctx, "INSERT INTO users(id,name,email,password_hash,role) VALUES($1,'Administrator',$2,$3,'admin') ON CONFLICT(email) DO NOTHING", ID(), strings.ToLower(email), string(ph))
-			if e != nil {
-				return e
-			}
-		}
 	}
 	return nil
 }
@@ -109,7 +79,10 @@ func (a *App) config(ctx context.Context, id string) (engine.Configuration, erro
 	return scanConfig(a.DB.QueryRow(ctx, configSelect+" WHERE id=$1", id))
 }
 func (a *App) configs(ctx context.Context) ([]engine.Configuration, error) {
-	rows, e := a.DB.Query(ctx, configSelect+" ORDER BY version DESC")
+	return a.configPage(ctx, 100, 0)
+}
+func (a *App) configPage(ctx context.Context, limit, offset int) ([]engine.Configuration, error) {
+	rows, e := a.DB.Query(ctx, configSelect+" WHERE ($1 OR source='client') ORDER BY version DESC LIMIT $2 OFFSET $3", a.Demo, limit, offset)
 	if e != nil {
 		return nil, e
 	}
@@ -197,12 +170,28 @@ func (a *App) insertConfig(ctx context.Context, c engine.Configuration, actor st
 	return c, e
 }
 func (a *App) listConfigs(w http.ResponseWriter, r *http.Request, s session) {
-	items, e := a.configs(r.Context())
+	limit, offset, ok := pagination(w, r)
+	if !ok {
+		return
+	}
+	items, e := a.configPage(r.Context(), limit, offset)
 	if e != nil {
 		a.dbError(w, e)
 		return
 	}
 	JSON(w, 200, items)
+}
+func (a *App) getConfig(w http.ResponseWriter, r *http.Request, s session) {
+	c, e := a.config(r.Context(), r.PathValue("id"))
+	if errors.Is(e, pgx.ErrNoRows) || (e == nil && !a.Demo && c.Source != "client") {
+		fail(w, 404, "Configuration not found")
+		return
+	}
+	if e != nil {
+		a.dbError(w, e)
+		return
+	}
+	JSON(w, 200, c)
 }
 func (a *App) createConfig(w http.ResponseWriter, r *http.Request, s session) {
 	var c engine.Configuration
@@ -210,6 +199,10 @@ func (a *App) createConfig(w http.ResponseWriter, r *http.Request, s session) {
 		return
 	}
 	c.Status = "draft"
+	if !a.Demo && c.Source != "client" {
+		fail(w, 400, "Production configurations must use client-approved data")
+		return
+	}
 	if errs := engine.ValidateConfig(c); len(errs) > 0 {
 		fail(w, 400, strings.Join(errs, "; "))
 		return
@@ -236,6 +229,12 @@ func (a *App) publishConfig(w http.ResponseWriter, r *http.Request, s session) {
 		fail(w, 400, strings.Join(errs, "; "))
 		return
 	}
+	if !a.Demo {
+		if errs := engine.ValidatePublication(c); len(errs) > 0 {
+			fail(w, 422, strings.Join(errs, "; "))
+			return
+		}
+	}
 	if c.Status != "published" {
 		tx, e := a.DB.Begin(r.Context())
 		if e != nil {
@@ -260,9 +259,10 @@ func (a *App) publishConfig(w http.ResponseWriter, r *http.Request, s session) {
 }
 
 type calculationRequest struct {
-	ConfigurationID string       `json:"configurationId"`
-	Input           engine.Input `json:"input"`
-	CaseID          string       `json:"caseId,omitempty"`
+	ConfigurationID    string       `json:"configurationId"`
+	Input              engine.Input `json:"input"`
+	CaseID             string       `json:"caseId,omitempty"`
+	ExpectedRevisionID string       `json:"expectedRevisionId,omitempty"`
 }
 
 func (a *App) calculate(w http.ResponseWriter, r *http.Request, s session) {
@@ -279,6 +279,27 @@ func (a *App) calculate(w http.ResponseWriter, r *http.Request, s session) {
 		a.dbError(w, e)
 		return
 	}
+	if !a.allowCalculation(w, c, in.Input, s.User) {
+		return
+	}
 	result := engine.Calculate(c, in.Input)
 	JSON(w, 200, result)
+}
+
+func (a *App) allowCalculation(w http.ResponseWriter, c engine.Configuration, in engine.Input, u User) bool {
+	if !a.Demo {
+		if c.Source != "client" {
+			fail(w, 422, "Demo configuration cannot be used in production")
+			return false
+		}
+		if in.CalculationDate == "" {
+			fail(w, 400, "Calculation effective date is required")
+			return false
+		}
+		if u.Role == "hr" && c.Status != "published" {
+			fail(w, 403, "HR calculations require published configuration")
+			return false
+		}
+	}
+	return true
 }

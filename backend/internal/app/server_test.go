@@ -43,4 +43,7 @@ func TestDocumentEscapesUntrustedCandidateAndTemplateText(t *testing.T) {
 	if !strings.Contains(html, "NOT AN EMPLOYMENT OFFER") {
 		t.Fatal("draft warning missing")
 	}
+	if strings.Contains(html, "\u00c2") || strings.Contains(html, "\u00e2\u20ac") {
+		t.Fatal("document contains incorrectly decoded punctuation")
+	}
 }

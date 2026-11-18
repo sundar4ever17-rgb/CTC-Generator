@@ -1,7 +1,7 @@
 FROM node:24 AS dependencies
 WORKDIR /app
 COPY package*.json ./
-RUN npm install --no-audit --no-fund
+RUN npm ci --no-audit --no-fund
 FROM dependencies AS build
 COPY . .
 ARG API_INTERNAL_URL=http://backend:8080

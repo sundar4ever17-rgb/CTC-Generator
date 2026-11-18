@@ -1,0 +1,42 @@
+name: ctc-upgrade-test
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ctc_upgrade_test
+      POSTGRES_USER: ctc
+      POSTGRES_PASSWORD: isolated_test_only
+    ports:
+      - "127.0.0.1:5443:5432"
+    volumes:
+      - upgrade_test_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ctc -d ctc_upgrade_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  backend:
+    image: ctc-generator-backend:production-upgrade
+    environment:
+      APP_ENV: demo
+      APP_ORIGIN: http://localhost:3022
+      DATABASE_URL: postgres://ctc:isolated_test_only@db:5432/ctc_upgrade_test?sslmode=disable
+    ports:
+      - "127.0.0.1:8092:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    init: true
+    shm_size: 256mb
+  frontend:
+    image: ctc-generator-frontend:production-upgrade
+    environment:
+      API_INTERNAL_URL: http://backend:8080
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      - "127.0.0.1:3022:3000"
+    depends_on:
+      - backend
+    init: true
+volumes:
+  upgrade_test_pgdata:

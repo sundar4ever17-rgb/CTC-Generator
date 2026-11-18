@@ -1,8 +1,27 @@
-# CTC Generator demo
+# CTC Generator
 
-A local Next.js + TypeScript, Go, and PostgreSQL implementation of the attached CTC Generator URD. The Go API is the authoritative calculation engine. PDFs are rendered from saved revisions using Chromium.
+A Next.js + TypeScript, Go, and PostgreSQL application based on the attached CTC Generator URD. The Go API is the authoritative calculation engine. PDFs are rendered from saved revisions using sandboxed Chromium in production.
 
-## Run
+The production upgrade includes explicit checksummed migrations, restricted database access, administrator bootstrap, password/session controls, role and record authorization, approved versioned policies with effective-date checks, immutable calculation/document history, and a separate HTTPS deployment. See the [gap analysis](docs/production-gap-analysis.md), [deployment instructions](docs/deployment.md), [backup and operations runbook](docs/operations.md), and [upgrade verification and release gates](docs/production-verification.md).
+
+**Business release is gated on client-approved policy annexures, manual acceptance examples and offer wording.** Synthetic test policies and the URD illustration are not production master data. No live deployment has been performed.
+
+## Open the upgraded local application
+
+The upgraded review instance is available at **http://localhost:3022**. Keep Docker Desktop running with Linux containers. To start the existing local review database and services again:
+
+```powershell
+cd "D:\CTC GENERATOR"
+docker compose -f compose.upgrade-test.yaml -f artifacts/final-api.override.yaml up -d
+```
+
+The local sample accounts listed below work in this review instance. The override preserves the current review database; on a fresh checkout without that local artifact, build the two `production-upgrade` images and use only `compose.upgrade-test.yaml`, as described in `tests/README.md`. The configured browser origin must match `http://localhost:3022`. Normal browser login/logout has been verified without request interception.
+
+This is local review mode with synthetic data. Real business deployment uses the separate production configuration and deployment runbook.
+
+To inspect the review database in DBeaver, create a PostgreSQL connection with host `127.0.0.1`, port `5443`, database `ctc_upgrade_final_test`, username `ctc`, and password `isolated_test_only`. SSL is disabled for this local review connection. Open `Schemas > public > Tables` to browse records. Port 5443 is bound only to localhost; port 5442 belongs to the original demo. These settings do not apply to production, which requires verified TLS and separate restricted database identities.
+
+## Run the original local demo
 
 Prerequisite: Docker Desktop running Linux containers, with Docker Compose.
 
@@ -70,8 +89,14 @@ docker compose -p ctc-generator-test -f compose.test.yaml up -d
 
 See [verification commands and results](docs/verification.md), [architecture and ER diagrams](docs/architecture.md), and [URD traceability and open questions](docs/requirements.md).
 
-## Production preparation
+## Production deployment
 
-The deployment design preserves typed configuration, exact decimal arithmetic, immutable input/result snapshots, role checks and audit history. Before production, supply and approve the missing client policy annexures and offer template; resolve rounding and effective-date conventions; integrate corporate identity as required; configure TLS, secret management, private database/document access, backups, retention and operational monitoring. The included local demo credentials and infrastructure settings are not production settings.
+Use `compose.production.yaml` separately from the demo file. Supply image digests, domain and secret-file paths using `.env.production.example`. Provision private PostgreSQL with verified TLS and distinct migration/runtime roles. Run the explicit `migrate` and one-time `bootstrap-admin` commands, apply the runtime grants, and complete the admin's initial password change. Follow [the deployment runbook](docs/deployment.md) for the exact sequence, backup requirements and approval gates.
+
+Production refuses insecure database transport, HTTP origins, active demo accounts, elevated runtime database roles and missing/outdated migrations. It never seeds demo users or configuration. Admin controls named users, ownership assignment and security session settings; C&B maintains and publishes approved policies; HR manages its assigned candidate/CTC records. A legacy read-only Auditor role is retained.
+
+All new production calculations require an explicit calculation effective date separate from joining date. Existing records are never recalculated or overwritten; subsequent edits create revisions with a concurrency check. Pending rules and invalid parity block final offers. Corporate SSO/MFA, client retention periods, recovery objectives and capacity targets must be agreed before launch; they are not silently assumed.
+
+Upgrade regression tests use `compose.upgrade-test.yaml` on local ports 3022/8092 with a separate database, preserving the original demo and its records. See [test commands](tests/README.md).
 
 Payroll, payslips, income-tax calculations, investment declarations, HRMS/ATS integration and CTC-target reverse solving remain outside the URD's first release.

@@ -5,7 +5,9 @@
   "scripts": {
     "test": "node api.mjs && node browser.mjs",
     "test:api": "node api.mjs",
-    "test:browser": "node browser.mjs"
+    "test:browser": "node browser.mjs",
+    "test:security": "node security.mjs",
+    "test:startup": "node startup.mjs"
   },
   "dependencies": { "playwright-core": "1.65.0" }
 }

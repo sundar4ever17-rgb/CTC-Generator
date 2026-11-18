@@ -9,8 +9,7 @@ const out = process.env.ARTIFACT_DIR || '/artifacts';
 await fs.mkdir(out, {recursive:true});
 const browser = await chromium.launch({executablePath:process.env.CHROMIUM_PATH || '/usr/bin/chromium', args:['--no-sandbox','--disable-dev-shm-usage','--host-resolver-rules=MAP localhost '+hostAddress]});
 const context = await browser.newContext({viewport:{width:1440,height:1000},acceptDownloads:true});
-// The container reaches the host by this alias; preserve the app's configured browser Origin.
-await context.route('**/api/**', async route => {const headers={...route.request().headers()};if(headers.origin===new URL(base).origin)headers.origin='http://localhost:3020';await route.continue({headers});});
+// Chromium resolves localhost to the Docker host; requests retain their real browser Origin.
 const page=await context.newPage(); page.setDefaultTimeout(15000);
 const pageErrors=[];page.on('pageerror',e=>pageErrors.push(e.message));
 const results=[];

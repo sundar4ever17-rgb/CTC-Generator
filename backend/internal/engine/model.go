@@ -1,6 +1,6 @@
 package engine
 
-const Version = "1.0.0"
+const Version = "1.2.0"
 
 type Configuration struct {
 	ID            string     `json:"id"`
@@ -100,6 +100,7 @@ type Input struct {
 	Designation        string          `json:"designation"`
 	Department         string          `json:"department"`
 	JoiningDate        string          `json:"joiningDate"`
+	CalculationDate    string          `json:"calculationDate,omitempty"`
 	LocationID         string          `json:"locationId"`
 	GradeID            string          `json:"gradeId"`
 	Qualification      string          `json:"qualification"`

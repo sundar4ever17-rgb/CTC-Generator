@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -52,7 +53,16 @@ func (a *App) caseFor(ctx context.Context, id string, u User) (CaseSummary, erro
 	return scanCase(a.DB.QueryRow(ctx, caseSQL+" WHERE c.id=$1 AND ($2<>'hr' OR c.owner_user_id=$3)", id, u.Role, u.ID))
 }
 func (a *App) listCases(w http.ResponseWriter, r *http.Request, s session) {
-	rows, e := a.DB.Query(r.Context(), caseSQL+" WHERE ($1<>'hr' OR c.owner_user_id=$2) ORDER BY c.updated_at DESC LIMIT 500", s.User.Role, s.User.ID)
+	limit, offset, ok := pagination(w, r)
+	if !ok {
+		return
+	}
+	search := strings.TrimSpace(r.URL.Query().Get("q"))
+	if len(search) > 200 {
+		fail(w, 400, "Search must be at most 200 characters")
+		return
+	}
+	rows, e := a.DB.Query(r.Context(), caseSQL+" WHERE ($1<>'hr' OR c.owner_user_id=$2) AND ($3='' OR position(lower($3) in lower(p.name || ' ' || p.candidate_reference))>0) ORDER BY c.updated_at DESC,c.id LIMIT $4 OFFSET $5", s.User.Role, s.User.ID, search, limit, offset)
 	if e != nil {
 		a.dbError(w, e)
 		return
@@ -66,6 +76,10 @@ func (a *App) listCases(w http.ResponseWriter, r *http.Request, s session) {
 			return
 		}
 		out = append(out, c)
+	}
+	if e = rows.Err(); e != nil {
+		a.dbError(w, e)
+		return
 	}
 	JSON(w, 200, out)
 }
@@ -90,6 +104,10 @@ func scanRevision(row pgx.Row) (Revision, error) {
 const revisionSQL = `SELECT r.id,r.revision_number,r.configuration_id,r.input_snapshot,r.result_snapshot,r.created_at,u.name FROM ctc_revisions r JOIN users u ON u.id=r.created_by`
 
 func (a *App) getCase(w http.ResponseWriter, r *http.Request, s session) {
+	limit, offset, ok := pagination(w, r)
+	if !ok {
+		return
+	}
 	c, e := a.caseFor(r.Context(), r.PathValue("id"), s.User)
 	if errors.Is(e, pgx.ErrNoRows) {
 		fail(w, 404, "CTC record not found")
@@ -99,7 +117,7 @@ func (a *App) getCase(w http.ResponseWriter, r *http.Request, s session) {
 		a.dbError(w, e)
 		return
 	}
-	rows, e := a.DB.Query(r.Context(), revisionSQL+" WHERE r.case_id=$1 ORDER BY r.revision_number DESC", c.ID)
+	rows, e := a.DB.Query(r.Context(), revisionSQL+" WHERE r.case_id=$1 ORDER BY r.revision_number DESC LIMIT $2 OFFSET $3", c.ID, limit, offset)
 	if e != nil {
 		a.dbError(w, e)
 		return
@@ -113,6 +131,10 @@ func (a *App) getCase(w http.ResponseWriter, r *http.Request, s session) {
 			return
 		}
 		revisions = append(revisions, v)
+	}
+	if e = rows.Err(); e != nil {
+		a.dbError(w, e)
+		return
 	}
 	JSON(w, 200, map[string]any{"case": c, "revisions": revisions})
 }
@@ -135,6 +157,9 @@ func (a *App) saveCase(w http.ResponseWriter, r *http.Request, s session) {
 	}
 	if e != nil {
 		a.dbError(w, e)
+		return
+	}
+	if !a.allowCalculation(w, c, in.Input, s.User) {
 		return
 	}
 	result := engine.Calculate(c, in.Input)
@@ -166,6 +191,14 @@ func (a *App) saveCase(w http.ResponseWriter, r *http.Request, s session) {
 		if errors.Is(e, pgx.ErrNoRows) || (e == nil && s.User.Role == "hr" && owner != s.User.ID) {
 			fail(w, 404, "CTC record not found")
 			return
+		}
+		if e == nil {
+			var latest string
+			e = tx.QueryRow(r.Context(), "SELECT id FROM ctc_revisions WHERE case_id=$1 ORDER BY revision_number DESC LIMIT 1", caseID).Scan(&latest)
+			if e == nil && ((!a.Demo && in.ExpectedRevisionID == "") || (in.ExpectedRevisionID != "" && in.ExpectedRevisionID != latest)) {
+				fail(w, 409, "This record has changed. Reopen its latest revision before saving.")
+				return
+			}
 		}
 		if e == nil {
 			_, e = tx.Exec(r.Context(), "UPDATE candidates SET candidate_reference=$2,name=$3,profile_snapshot=$4 WHERE id=(SELECT candidate_id FROM ctc_cases WHERE id=$1)", caseID, in.Input.CandidateReference, in.Input.CandidateName, inputJSON)
@@ -211,4 +244,73 @@ func (a *App) saveCase(w http.ResponseWriter, r *http.Request, s session) {
 		return
 	}
 	JSON(w, 201, map[string]any{"caseId": caseID, "revisionId": revisionID, "result": result})
+}
+
+func pagination(w http.ResponseWriter, r *http.Request) (int, int, bool) {
+	limit, offset := 100, 0
+	var err error
+	if s := r.URL.Query().Get("limit"); s != "" {
+		limit, err = strconv.Atoi(s)
+		if err != nil || limit < 1 || limit > 500 {
+			fail(w, 400, "limit must be 1-500")
+			return 0, 0, false
+		}
+	}
+	if s := r.URL.Query().Get("offset"); s != "" {
+		offset, err = strconv.Atoi(s)
+		if err != nil || offset < 0 || offset > 1000000 {
+			fail(w, 400, "offset must be 0-1000000")
+			return 0, 0, false
+		}
+	}
+	w.Header().Set("X-Page-Limit", strconv.Itoa(limit))
+	w.Header().Set("X-Page-Offset", strconv.Itoa(offset))
+	return limit, offset, true
+}
+
+func (a *App) assignCase(w http.ResponseWriter, r *http.Request, s session) {
+	var in struct {
+		OwnerUserID string `json:"ownerUserId"`
+	}
+	if !readJSON(w, r, &in) {
+		return
+	}
+	tx, err := a.DB.Begin(r.Context())
+	if err != nil {
+		a.dbError(w, err)
+		return
+	}
+	defer tx.Rollback(r.Context())
+	var owner string
+	err = tx.QueryRow(r.Context(), "SELECT owner_user_id FROM ctc_cases WHERE id=$1 FOR UPDATE", r.PathValue("id")).Scan(&owner)
+	if errors.Is(err, pgx.ErrNoRows) {
+		fail(w, 404, "CTC record not found")
+		return
+	}
+	if err != nil {
+		a.dbError(w, err)
+		return
+	}
+	var role string
+	err = tx.QueryRow(r.Context(), "SELECT role FROM users WHERE id=$1 AND active=true FOR SHARE", in.OwnerUserID).Scan(&role)
+	if errors.Is(err, pgx.ErrNoRows) || (err == nil && role != "hr") {
+		fail(w, 400, "Choose an active HR user")
+		return
+	}
+	if err != nil {
+		a.dbError(w, err)
+		return
+	}
+	_, err = tx.Exec(r.Context(), "UPDATE ctc_cases SET owner_user_id=$2,updated_at=now() WHERE id=$1", r.PathValue("id"), in.OwnerUserID)
+	if err == nil {
+		err = auditTx(r.Context(), tx, s.User.ID, "case.assign", "case", r.PathValue("id"), map[string]string{"previousOwnerId": owner, "ownerUserId": in.OwnerUserID})
+	}
+	if err == nil {
+		err = tx.Commit(r.Context())
+	}
+	if err != nil {
+		a.dbError(w, err)
+		return
+	}
+	JSON(w, 200, map[string]bool{"ok": true})
 }

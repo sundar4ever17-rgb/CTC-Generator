@@ -1,0 +1,85 @@
+name: Verify application
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - run: go test -race ./...
+        working-directory: backend
+      - run: go vet ./...
+        working-directory: backend
+      - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        working-directory: backend
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - run: npm run typecheck
+        working-directory: frontend
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: frontend
+  api-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t ctc-generator-backend backend
+      - run: docker compose -p ctc-ci -f compose.test.yaml up -d --wait
+      - run: docker build -f scripts/Dockerfile.qa -t ctc-generator-qa .
+      - name: Wait for API readiness
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:8090/api/health; then exit 0; fi
+            sleep 2
+          done
+          exit 1
+      - name: Independent API and PDF acceptance
+        run: docker run --rm --network host -e TEST_BASE_URL=http://localhost:8090 ctc-generator-qa npm run test:api
+      - name: Configurable session policy regression
+        run: |
+          docker compose -p ctc-ci -f compose.test.yaml exec -T db createdb -U ctc ctc_session_policy_test
+          docker run --rm --network ctc-ci_default -v "${PWD}/backend:/app" -w /app -e CTC_TEST_FIXTURES=1 -e TEST_DATABASE_URL=postgres://ctc:ctc_test_only@db:5432/ctc_session_policy_test?sslmode=disable golang:1.27.4-bookworm go test ./internal/app -run TestConfiguredIdlePeriodPreservesValidSessionOnConcurrentLogin -count=1
+      - name: Authentication, authorization and workflow security acceptance
+        run: docker run --rm --network host -e TEST_BASE_URL=http://localhost:8090 -e CTC_TEST_FIXTURES=1 ctc-generator-qa npm run test:security
+      - name: Production-mode TLS, sandbox and recovery integration
+        shell: pwsh
+        run: ./scripts/test-production.ps1 -Image ctc-generator-backend -ApiPort 8094
+      - name: Store synthetic production acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-acceptance
+          if-no-files-found: ignore
+          path: |
+            artifacts/ctc-upgrade-test-prod-*/production-security-results.json
+            artifacts/ctc-upgrade-test-prod-*/recovery-results.json
+            artifacts/ctc-upgrade-test-prod-*/production-*-final.pdf
+      - name: Container diagnostics
+        if: failure()
+        run: docker compose -p ctc-ci -f compose.test.yaml logs --tail=100
+      - name: Stop isolated CI environment
+        if: always()
+        run: docker compose -p ctc-ci -f compose.test.yaml down

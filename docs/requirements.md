@@ -5,7 +5,7 @@ Source: `User Requirement Document (URD) - CTC generator.pdf`, five pages. This 
 | URD requirement | Application coverage | Policy status |
 | --- | --- | --- |
 | FR-01 Five component groups | Generator, stored calculation lines, CTC and offer annexure | All 20 named components retained |
-| FR-02 Basic grade range | Versioned grade editor and backend validation | Actual grade annexure and selection method pending |
+| FR-02 Basic grade range | Versioned grade editor, effective windows and backend validation | Actual grade annexure and selection method pending |
 | FR-03 Qualification gate | NONE/CA/CMA/CS input; grade-specific slabs | Recognition/slab values pending |
 | FR-04 Uncapped balancing HRA | Exclusion target minus already calculated fixed components | Finance/Tax treatment approval pending |
 | FR-05 Three-tier Employer PF | Decimal calculation using Basic threshold and half of Inclusion | URD parameters seeded; client confirmation of applicability/boundaries remains |
@@ -40,7 +40,7 @@ Conveyance: grade amount/cap. The URD example uses 7300; the production grade ma
 9. Finance/Tax acceptance of uncapped HRA.
 10. Official offer template, required personal/employment fields and authorized signatory.
 11. Meaning of C&B-only edit access versus HR input editing.
-12. Effective-date selection, retention, SSO, hosting and operational requirements.
+12. Approve the explicit calculation effective date and manual version-selection convention; define overlap precedence if automatic selection is later requested. Retention, SSO/MFA, hosting and operational requirements remain client decisions.
 
 ## Demonstration versus approved configuration
 

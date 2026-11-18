@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -13,7 +14,9 @@ import (
 func (i *Input) UnmarshalJSON(b []byte) error {
 	type plain Input
 	var v plain
-	if err := json.Unmarshal(b, &v); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(b))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&v); err != nil {
 		return err
 	}
 	var required map[string]json.RawMessage
@@ -24,7 +27,40 @@ func (i *Input) UnmarshalJSON(b []byte) error {
 	if !ok || string(raw) == "null" {
 		return fmt.Errorf("npsOptIn must explicitly be true or false")
 	}
+	// encoding/json otherwise silently coerces a null boolean to false. A
+	// missing eligibility answer must never become a negative election.
+	if jobRaw, exists := required["job"]; exists && string(jobRaw) != "null" {
+		var job map[string]json.RawMessage
+		if err := json.Unmarshal(jobRaw, &job); err != nil {
+			return err
+		}
+		for field, value := range job {
+			if !jobField(field) {
+				return fmt.Errorf("unknown job parameter %q", field)
+			}
+			if string(value) == "null" {
+				return fmt.Errorf("job parameter %s must explicitly be true or false", field)
+			}
+		}
+	}
 	*i = Input(v)
+	return nil
+}
+
+func (c *Condition) UnmarshalJSON(b []byte) error {
+	var value struct {
+		Field  string `json:"field"`
+		Equals *bool  `json:"equals"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(b))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&value); err != nil {
+		return err
+	}
+	if value.Equals == nil {
+		return fmt.Errorf("job condition equals must explicitly be true or false")
+	}
+	c.Field, c.Equals = value.Field, *value.Equals
 	return nil
 }
 
@@ -41,10 +77,18 @@ func dec(s string) decimal.Decimal {
 func allowedBasis(s string, hra bool) bool {
 	return s == "basic" || s == "gross" || s == "inclusion" || s == "exclusion" || (hra && s == "hra")
 }
+
+func jobField(s string) bool {
+	return s == "sixthDay" || s == "fieldService" || s == "relocation" || s == "deputation" || s == "additionalHra"
+}
+
 func ValidateConfig(c Configuration) []string {
 	d := c.Data
 	var errs []string
 	add := func(s string) { errs = append(errs, s) }
+	if len(d.Grades) > 500 || len(d.Locations) > 500 || len(d.Benefits) > 5000 {
+		return []string{"Configuration supports at most 500 grades, 500 locations and 5000 benefit rules"}
+	}
 	if strings.TrimSpace(c.Name) == "" {
 		add("Configuration name is required")
 	}
@@ -52,7 +96,7 @@ func ValidateConfig(c Configuration) []string {
 		add("Source must be client or urd-demo")
 	}
 	if d.BasicMethod != "manual" {
-		add("Only manual Basic selection is defined for this demo; another method requires an approved rule")
+		add("Only manual Basic selection is supported; another method requires an approved rule")
 	}
 	if d.Rounding.Scale < 0 || d.Rounding.Scale > 2 || d.Rounding.Mode != "half_up" {
 		add("Choose a 0-2 decimal, half_up rounding policy; another convention requires a reviewed rule")
@@ -187,10 +231,15 @@ func ValidateConfig(c Configuration) []string {
 				years[s.Year] = true
 			}
 		}
+		conditionFields := map[string]bool{}
 		for _, condition := range r.Conditions {
-			if condition.Field != "sixthDay" && condition.Field != "fieldService" && condition.Field != "relocation" && condition.Field != "deputation" && condition.Field != "additionalHra" {
+			if !jobField(condition.Field) {
 				add("Unsupported job condition " + condition.Field)
 			}
+			if conditionFields[condition.Field] {
+				add("Duplicate job condition " + condition.Field + " for " + r.Component)
+			}
+			conditionFields[condition.Field] = true
 		}
 		for j := 0; j < i; j++ {
 			other := d.Benefits[j]
@@ -199,6 +248,7 @@ func ValidateConfig(c Configuration) []string {
 			}
 		}
 	}
+	errs = append(errs, validateConfigurationValues(c)...)
 	return errs
 }
 
@@ -225,6 +275,12 @@ func Calculate(c Configuration, in Input) Result {
 	}
 	set := func(code string, v decimal.Decimal, period, formula, status string) {
 		v = v.Round(scale)
+		// Persisted line amounts use NUMERIC(24,8). Reject calculations that
+		// cannot be stored exactly instead of failing partway through a save.
+		limit := decimal.New(1, 16)
+		if v.Abs().GreaterThanOrEqual(limit) || (period == "monthly" && v.Mul(decimal.NewFromInt(12)).Abs().GreaterThanOrEqual(limit)) {
+			issue("AMOUNT_RANGE", code, "Calculated amount exceeds the supported database precision", "error")
+		}
 		l := &out.Lines[idx[code]]
 		l.Period = period
 		l.Amount = Str(money(v))
@@ -250,6 +306,14 @@ func Calculate(c Configuration, in Input) Result {
 	}
 	if len(configErrors) > 0 {
 		return out
+	}
+	for _, inputIssue := range ValidateInput(in) {
+		out.Issues = append(out.Issues, inputIssue)
+	}
+	if in.CalculationDate != "" {
+		if _, err := time.Parse("2006-01-02", in.CalculationDate); err == nil && ((c.EffectiveFrom != "" && in.CalculationDate < c.EffectiveFrom) || (c.EffectiveTo != "" && in.CalculationDate > c.EffectiveTo)) {
+			issue("CONFIG_NOT_EFFECTIVE", "calculationDate", "The selected configuration is not effective on the calculation date", "error")
+		}
 	}
 	if !validDecimal(in.Gross) || !validDecimal(in.Basic) {
 		issue("INPUT_DECIMAL", "gross", "Gross and Basic must be plain nonnegative decimal strings with at most 12 integer and 8 fractional digits", "error")
@@ -371,16 +435,25 @@ func Calculate(c Configuration, in Input) Result {
 			pending(code, "Client rule has not been supplied")
 			return
 		}
+		missingCondition := ""
+		ineligible := false
 		for _, condition := range rule.Conditions {
 			actual, exists := in.Job[condition.Field]
 			if !exists {
-				pending(code, "Required job parameter "+condition.Field+" was not provided")
-				return
+				if missingCondition == "" {
+					missingCondition = condition.Field
+				}
+			} else if actual != condition.Equals {
+				ineligible = true
 			}
-			if actual != condition.Equals {
-				set(code, decimal.Zero, rule.Period, "Approved eligibility condition not met", "not_applicable")
-				return
-			}
+		}
+		if ineligible {
+			set(code, decimal.Zero, rule.Period, "Approved eligibility condition not met", "not_applicable")
+			return
+		}
+		if missingCondition != "" {
+			pending(code, "Required job parameter "+missingCondition+" was not provided")
+			return
 		}
 		var amount decimal.Decimal
 		formula := ""

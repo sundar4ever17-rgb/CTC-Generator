@@ -4,6 +4,7 @@ import (
 	"context"
 	"ctc/internal/app"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,8 +13,30 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
+	if len(os.Args) > 1 {
+		command := os.Args[1]
+		if command != "migrate" && command != "bootstrap-admin" {
+			log.Fatal("usage: ctc-api [migrate|bootstrap-admin]")
+		}
+		pool, err := app.OpenDatabase(ctx)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer pool.Close()
+		if command == "migrate" {
+			err = app.Migrate(ctx, pool)
+		} else {
+			err = app.BootstrapAdmin(ctx, pool)
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+		slog.Info("administrative command completed", "command", command)
+		return
+	}
 	a, err := app.New(ctx)
 	if err != nil {
 		log.Fatal(err)
