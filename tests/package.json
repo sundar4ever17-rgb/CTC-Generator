@@ -7,7 +7,8 @@
     "test:api": "node api.mjs",
     "test:browser": "node browser.mjs",
     "test:security": "node security.mjs",
-    "test:startup": "node startup.mjs"
+    "test:startup": "node startup.mjs",
+    "test:rules": "node rules-api.mjs"
   },
   "dependencies": { "playwright-core": "1.65.0" }
 }

@@ -104,6 +104,8 @@ func (a *App) insertConfig(ctx context.Context, c engine.Configuration, actor st
 	}
 	defer tx.Rollback(ctx)
 	c.ID = ID()
+	publish := c.Status == "published"
+	c.Status = "draft"
 	b, _ := json.Marshal(c.Data)
 	var at time.Time
 	e = tx.QueryRow(ctx, `INSERT INTO configurations(id,name,source,status,effective_from,effective_to,data,created_by,published_at) VALUES($1,$2,$3,$4,$5::date,$6::date,$7,$8,CASE WHEN $4='published' THEN now() ELSE NULL END) RETURNING version,created_at`, c.ID, c.Name, c.Source, c.Status, nullable(c.EffectiveFrom), nullable(c.EffectiveTo), b, nullable(actor)).Scan(&c.Version, &at)
@@ -111,14 +113,8 @@ func (a *App) insertConfig(ctx context.Context, c engine.Configuration, actor st
 		return c, e
 	}
 	c.CreatedAt = at.Format(time.RFC3339)
-	for i, component := range engine.Components {
-		group := component.Group
-		if component.Code == "ANNUAL_SPECIAL" && c.Data.AnnualSpecialGroup == "policy" {
-			group = "policy"
-		}
-		if _, e = tx.Exec(ctx, "INSERT INTO component_configurations(configuration_id,component_code,group_code,display_order) VALUES($1,$2,$3,$4)", c.ID, component.Code, group, i); e != nil {
-			return c, e
-		}
+	if e = insertRuleProjections(ctx, tx, c); e != nil {
+		return c, e
 	}
 	for _, g := range c.Data.Grades {
 		_, e = tx.Exec(ctx, "INSERT INTO grade_salary_configurations(configuration_id,grade_id,name,basic_min,basic_max,conveyance,conveyance_cap,basic_selection_method) VALUES($1,$2,$3,$4,$5,$6,$7,$8)", c.ID, g.ID, g.Name, g.BasicMin, g.BasicMax, g.Conveyance, g.ConveyanceCap, c.Data.BasicMethod)
@@ -137,21 +133,23 @@ func (a *App) insertConfig(ctx context.Context, c engine.Configuration, actor st
 		}
 	}
 	d := c.Data
-	rounding, _ := json.Marshal(d.Rounding)
-	_, e = tx.Exec(ctx, `INSERT INTO core_calculation_parameters(configuration_id,pf_basic_threshold,pf_inclusion_share,pf_basis_cap,pf_rate,nps_old_rate,nps_new_rate,esi_rate,esi_ceiling,esi_eligibility_basis,esi_contribution_basis,gratuity_rate,rounding_policy,esi_ceiling_inclusive) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, c.ID, d.PF.BasicThreshold, d.PF.InclusionShare, d.PF.BasisCap, d.PF.Rate, d.NPS.OldRate, d.NPS.NewRate, d.ESI.Rate, d.ESI.Ceiling, nullable(d.ESI.EligibilityBasis), nullable(d.ESI.ContributionBasis), d.GratuityRate, rounding, d.ESI.CeilingInclusive)
-	if e != nil {
-		return c, e
-	}
-	for _, r := range d.Benefits {
-		id := ID()
-		conditions, _ := json.Marshal(r.Conditions)
-		_, e = tx.Exec(ctx, `INSERT INTO benefit_configurations(id,configuration_id,component_code,grade_id,location_id,rule_kind,amount,rate,basis_code,cap,period,conditions,notes,basis_period) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, id, c.ID, r.Component, nullable(r.GradeID), nullable(r.LocationID), r.Kind, decimalNullable(r.Amount), decimalNullable(r.Rate), nullable(r.Basis), decimalNullable(r.Cap), nullable(r.Period), conditions, r.Notes, nullable(r.BasisPeriod))
+	if d.Rules == nil {
+		rounding, _ := json.Marshal(d.Rounding)
+		_, e = tx.Exec(ctx, `INSERT INTO core_calculation_parameters(configuration_id,pf_basic_threshold,pf_inclusion_share,pf_basis_cap,pf_rate,nps_old_rate,nps_new_rate,esi_rate,esi_ceiling,esi_eligibility_basis,esi_contribution_basis,gratuity_rate,rounding_policy,esi_ceiling_inclusive) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, c.ID, d.PF.BasicThreshold, d.PF.InclusionShare, d.PF.BasisCap, d.PF.Rate, d.NPS.OldRate, d.NPS.NewRate, d.ESI.Rate, d.ESI.Ceiling, nullable(d.ESI.EligibilityBasis), nullable(d.ESI.ContributionBasis), d.GratuityRate, rounding, d.ESI.CeilingInclusive)
 		if e != nil {
 			return c, e
 		}
-		for _, item := range r.Schedule {
-			if _, e = tx.Exec(ctx, "INSERT INTO benefit_schedule_items(benefit_id,year,amount) VALUES($1,$2,$3)", id, item.Year, item.Amount); e != nil {
+		for _, r := range d.Benefits {
+			id := ID()
+			conditions, _ := json.Marshal(r.Conditions)
+			_, e = tx.Exec(ctx, `INSERT INTO benefit_configurations(id,configuration_id,component_code,grade_id,location_id,rule_kind,amount,rate,basis_code,cap,period,conditions,notes,basis_period) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, id, c.ID, r.Component, nullable(r.GradeID), nullable(r.LocationID), r.Kind, decimalNullable(r.Amount), decimalNullable(r.Rate), nullable(r.Basis), decimalNullable(r.Cap), nullable(r.Period), conditions, r.Notes, nullable(r.BasisPeriod))
+			if e != nil {
 				return c, e
+			}
+			for _, item := range r.Schedule {
+				if _, e = tx.Exec(ctx, "INSERT INTO benefit_schedule_items(benefit_id,year,amount) VALUES($1,$2,$3)", id, item.Year, item.Amount); e != nil {
+					return c, e
+				}
 			}
 		}
 	}
@@ -160,6 +158,12 @@ func (a *App) insertConfig(ctx context.Context, c engine.Configuration, actor st
 		if _, e = tx.Exec(ctx, "INSERT INTO document_template_versions(id,configuration_id,document_type,template_snapshot) VALUES($1,$2,$3,$4)", ID(), c.ID, kind, template); e != nil {
 			return c, e
 		}
+	}
+	if publish {
+		if _, e = tx.Exec(ctx, "UPDATE configurations SET status='published',published_at=now() WHERE id=$1", c.ID); e != nil {
+			return c, e
+		}
+		c.Status = "published"
 	}
 	details, _ := json.Marshal(map[string]any{"name": c.Name, "version": c.Version, "source": c.Source, "status": c.Status})
 	_, e = tx.Exec(ctx, "INSERT INTO audit_events(id,actor_id,action,entity_type,entity_id,details) VALUES($1,$2,'configuration.create','configuration',$3,$4)", ID(), nullable(actor), c.ID, details)

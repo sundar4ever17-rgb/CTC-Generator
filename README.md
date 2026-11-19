@@ -21,6 +21,18 @@ This is local review mode with synthetic data. Real business deployment uses the
 
 To inspect the review database in DBeaver, create a PostgreSQL connection with host `127.0.0.1`, port `5443`, database `ctc_upgrade_final_test`, username `ctc`, and password `isolated_test_only`. SSL is disabled for this local review connection. Open `Schemas > public > Tables` to browse records. Port 5443 is bound only to localhost; port 5442 belongs to the original demo. These settings do not apply to production, which requires verified TLS and separate restricted database identities.
 
+## Configurable calculation rules
+
+C&B users can open **Configuration**, select a base version, and choose
+**Configure calculation rules**. The new **Calculation rules** editor manages
+salary components, categories, formulas, eligibility, group targets, and additional
+HR inputs. Preview changes, then save a new version. Existing versions, calculations,
+and PDFs retain their original behavior and figures. Conversion starts with the
+same URD 50:50 split; alternative policies require client approval.
+
+See [configuration workflow and engine behavior](docs/configurable-calculations.md)
+and [isolated verification commands](tests/README.md).
+
 ## Run the original local demo
 
 Prerequisite: Docker Desktop running Linux containers, with Docker Compose.

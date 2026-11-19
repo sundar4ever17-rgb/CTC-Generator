@@ -31,6 +31,8 @@ type docData struct {
 	Configuration engine.Configuration
 	Template      engine.OfferTemplate
 	Groups        []docGroup
+	GroupResults  []engine.GroupResult
+	DynamicGroups bool
 	GradeName     string
 	LocationName  string
 	Generated     string
@@ -73,10 +75,15 @@ td,th{padding:7px 8px;border-bottom:1px solid #e4e9ec}td.num,th.num{text-align:r
 {{range .Lines}}<tr><td>{{.Name}}<div class="subtle">{{.Formula}}</div></td><td>{{.Period}}<br><span class="subtle">{{.Status}}</span></td><td class="num">{{if .Monthly}}{{money .Monthly}}{{else}}&mdash;{{end}}</td><td class="num {{if not .Annual}}pending{{end}}">{{money .Annual}}</td></tr>{{end}}
 </tbody></table>{{end}}
 <div class="summary">
-<div class="sumrow"><span>Monthly Gross (includes Employer PF, NPS and Superannuation)</span><strong>INR {{.Revision.Result.Totals.Gross}}</strong></div>
+<div class="sumrow"><span>{{if .DynamicGroups}}Monthly Gross (configured Gross groups){{else}}Monthly Gross (includes Employer PF, NPS and Superannuation){{end}}</span><strong>INR {{.Revision.Result.Totals.Gross}}</strong></div>
+{{if .DynamicGroups}}{{range .GroupResults}}{{if .InGross}}
+<div class="sumrow"><span>{{.Name}}</span><strong>{{money .Monthly}}</strong></div>
+{{if .Target}}<div class="sumrow subtle"><span>{{.Name}} target / difference</span><span>{{money .Target}} / {{money .Difference}}</span></div>{{end}}
+{{end}}{{end}}{{else}}
 <div class="sumrow"><span>Inclusion wages</span><strong>{{money .Revision.Result.Totals.Inclusion}}</strong></div>
 <div class="sumrow"><span>Exclusion wages</span><strong>{{money .Revision.Result.Totals.Exclusion}}</strong></div>
 <div class="sumrow"><span>Parity difference</span><strong>{{money .Revision.Result.Totals.Difference}}</strong></div>
+{{end}}
 <div class="sumrow total"><span>{{if .Revision.Result.Totals.AnnualCTC}}Annual CTC{{else}}Known annual subtotal &mdash; incomplete{{end}}</span><span>{{if .Revision.Result.Totals.AnnualCTC}}{{money .Revision.Result.Totals.AnnualCTC}}{{else}}INR {{.Revision.Result.Totals.KnownAnnualTotal}}{{end}}</span></div>
 </div>
 <p class="subtle">Annual values are CTC allocations under the selected configuration, not monthly take-home pay. Gratuity is shown as a CTC provision. Annual, one-time and scheduled payments are not assumed to be monthly cash. Tax computation is outside this application.</p>
@@ -88,7 +95,15 @@ td,th{padding:7px 8px;border-bottom:1px solid #e4e9ec}td.num,th.num{text-align:r
 func renderDocument(v Revision, c engine.Configuration, t engine.OfferTemplate, kind, mode string) (string, error) {
 	groups := []docGroup{}
 	names := map[string]string{"inclusion": "1. Inclusion Wages", "exclusion": "2. Exclusion Wages", "statutory": "3. Statutory Payments", "policy": "4. Policy-Based Payments", "variable": "5. Variable Pay"}
-	for _, g := range []string{"inclusion", "exclusion", "statutory", "policy", "variable"} {
+	groupCodes := []string{"inclusion", "exclusion", "statutory", "policy", "variable"}
+	if len(v.Result.Groups) > 0 {
+		groupCodes = make([]string, 0, len(v.Result.Groups))
+		for i, group := range v.Result.Groups {
+			groupCodes = append(groupCodes, group.Code)
+			names[group.Code] = fmt.Sprintf("%d. %s", i+1, group.Name)
+		}
+	}
+	for _, g := range groupCodes {
 		lines := []engine.Line{}
 		for _, l := range v.Result.Lines {
 			if l.Group == g {
@@ -113,7 +128,7 @@ func renderDocument(v Revision, c engine.Configuration, t engine.OfferTemplate, 
 		}
 	}
 	var b bytes.Buffer
-	e := docTemplate.Execute(&b, docData{Title: title, Mode: mode, Draft: mode != "final", IsOffer: kind == "offer", Revision: v, Configuration: c, Template: t, Groups: groups, GradeName: gradeName, LocationName: locationName})
+	e := docTemplate.Execute(&b, docData{Title: title, Mode: mode, Draft: mode != "final", IsOffer: kind == "offer", Revision: v, Configuration: c, Template: t, Groups: groups, GroupResults: v.Result.Groups, DynamicGroups: len(v.Result.Groups) > 0, GradeName: gradeName, LocationName: locationName})
 	return b.String(), e
 }
 func (a *App) renderPDF(ctx context.Context, html string) ([]byte, error) {
@@ -195,6 +210,25 @@ func (a *App) document(w http.ResponseWriter, r *http.Request, s session) {
 		fail(w, 422, "Create a production revision with a client configuration and explicit calculation effective date")
 		return
 	}
+	// Existing PDF bytes belong to the saved revision. Keep them downloadable
+	// without applying a newer publication validator or document renderer.
+	if format == "pdf" {
+		var savedContent []byte
+		var savedChecksum string
+		err := a.DB.QueryRow(r.Context(), "SELECT content,checksum FROM generated_documents WHERE revision_id=$1 AND document_type=$2 AND mode=$3", v.ID, kind, mode).Scan(&savedContent, &savedChecksum)
+		if err == nil {
+			if hash(string(savedContent)) != savedChecksum {
+				fail(w, 500, "Stored document integrity check failed")
+				return
+			}
+			a.sendSavedDocument(w, r, s, v.ID, kind, mode, savedContent)
+			return
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			a.dbError(w, err)
+			return
+		}
+	}
 	if !a.Demo && mode == "final" {
 		if errs := engine.ValidatePublication(c); len(errs) > 0 {
 			fail(w, 422, "Final document requires complete approved production configuration")
@@ -270,12 +304,16 @@ func (a *App) document(w http.ResponseWriter, r *http.Request, s session) {
 			return
 		}
 	}
-	if e = a.audit(r.Context(), s.User.ID, "document.download", "revision", v.ID, map[string]string{"kind": kind, "mode": mode, "sha256": hash(string(content))}); e != nil {
-		a.dbError(w, e)
+	a.sendSavedDocument(w, r, s, v.ID, kind, mode, content)
+}
+
+func (a *App) sendSavedDocument(w http.ResponseWriter, r *http.Request, s session, revisionID, kind, mode string, content []byte) {
+	if err := a.audit(r.Context(), s.User.ID, "document.download", "revision", revisionID, map[string]string{"kind": kind, "mode": mode, "sha256": hash(string(content))}); err != nil {
+		a.dbError(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/pdf")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s-%s-%s.pdf", kind, mode, v.ID))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s-%s-%s.pdf", kind, mode, revisionID))
 	w.Header().Set("Content-Length", fmt.Sprint(len(content)))
 	_, _ = w.Write(content)
 }

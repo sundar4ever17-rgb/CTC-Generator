@@ -218,7 +218,7 @@ func (a *App) saveCase(w http.ResponseWriter, r *http.Request, s session) {
 	if result.Complete {
 		status = "complete"
 	}
-	_, e = tx.Exec(r.Context(), `INSERT INTO ctc_revisions(id,case_id,revision_number,configuration_id,engine_version,grade_id,location_id,qualification_code,gross,basic,tax_regime,nps_opt_in,input_snapshot,result_snapshot,status,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`, revisionID, caseID, number, c.ID, engine.Version, in.Input.GradeID, in.Input.LocationID, in.Input.Qualification, in.Input.Gross, in.Input.Basic, in.Input.TaxRegime, in.Input.NPSOptIn, inputJSON, resultJSON, status, s.User.ID)
+	_, e = tx.Exec(r.Context(), `INSERT INTO ctc_revisions(id,case_id,revision_number,configuration_id,engine_version,grade_id,location_id,qualification_code,gross,basic,tax_regime,nps_opt_in,input_snapshot,result_snapshot,status,created_by) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`, revisionID, caseID, number, c.ID, result.EngineVersion, in.Input.GradeID, in.Input.LocationID, in.Input.Qualification, in.Input.Gross, decimalNullable(in.Input.Basic), in.Input.TaxRegime, in.Input.NPSOptIn, inputJSON, resultJSON, status, s.User.ID)
 	if e != nil {
 		a.dbError(w, e)
 		return
@@ -234,7 +234,7 @@ func (a *App) saveCase(w http.ResponseWriter, r *http.Request, s session) {
 		a.dbError(w, e)
 		return
 	}
-	details, _ := json.Marshal(map[string]any{"revisionId": revisionID, "revisionNumber": number, "configurationId": c.ID, "configurationVersion": c.Version, "engineVersion": engine.Version, "status": status})
+	details, _ := json.Marshal(map[string]any{"revisionId": revisionID, "revisionNumber": number, "configurationId": c.ID, "configurationVersion": c.Version, "engineVersion": result.EngineVersion, "status": status})
 	_, e = tx.Exec(r.Context(), "INSERT INTO audit_events(id,actor_id,action,entity_type,entity_id,details) VALUES($1,$2,'ctc.save','case',$3,$4)", ID(), s.User.ID, caseID, details)
 	if e == nil {
 		e = tx.Commit(r.Context())

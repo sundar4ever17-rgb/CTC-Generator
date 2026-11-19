@@ -19,7 +19,7 @@ type migration struct{ version, sql string }
 
 func migrations() []migration {
 	items := []migration{{"001_baseline", schema}}
-	for _, name := range []string{"002_production", "003_settings"} {
+	for _, name := range []string{"002_production", "003_settings", "004_configurable_rules"} {
 		b, err := migrationFiles.ReadFile("migrations/" + name + ".sql")
 		if err != nil {
 			panic(err)

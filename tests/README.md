@@ -5,6 +5,31 @@ against a dedicated test database. They do not delete records or recreate a
 database. `CTC_TEST_FIXTURES=1` explicitly confirms the target is isolated when
 using a port other than the original acceptance port 8090.
 
+## Configurable engine verification
+
+Use a separate environment for rules fixtures; do not point these suites at the
+working review instance or a business database.
+
+```powershell
+docker build -t ctc-generator-backend:configurable-rules backend
+docker build -t ctc-generator-frontend:configurable-rules frontend
+docker compose -f compose.rules-test.yaml up -d
+docker build -f scripts/Dockerfile.qa -t ctc-generator-qa .
+docker run --rm -v "${PWD}/artifacts/rules-api:/artifacts" -e CTC_TEST_FIXTURES=1 -e TEST_BASE_URL=http://host.docker.internal:8094 -e TEST_ORIGIN=http://localhost:3024 ctc-generator-qa npm run test:rules
+docker run --rm -v "${PWD}/frontend/tests/rules-browser.mjs:/qa/rules-browser.mjs:ro" -v "${PWD}/artifacts/rules-browser:/artifacts" -e CTC_TEST_FIXTURES=1 -e APP_URL=http://localhost:3024 ctc-generator-qa node rules-browser.mjs
+```
+
+The original API/browser suites also run against these isolated ports. The
+production runner includes `rules-api.mjs` after the legacy security/PDF checks,
+covering actual restricted-role inserts for new component identities and groups.
+Use a different API port, such as 8096, if the rules demo test stack is running.
+
+The Go test `TestRuleMigrationPreservesHistoryAndPersistsDynamicPolicy` accepts
+`RULES_TEST_DATABASE_URL` only for a **new empty** database whose name ends in
+`_test`, together with `CTC_TEST_FIXTURES=1`. It adopts the preceding schema and
+verifies the new migration preserves existing snapshots and PDF bytes. Keep this
+database separate from the settings tests' `TEST_DATABASE_URL` fixture.
+
 ## Build and run the upgrade environment
 
 ```powershell

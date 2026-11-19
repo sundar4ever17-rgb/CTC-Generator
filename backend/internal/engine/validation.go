@@ -123,6 +123,9 @@ func validateConfigurationValues(c Configuration) []string {
 // is an explicit assertion by C&B that all master policies are supplied and
 // approved. Missing values must not acquire illustrative defaults.
 func ValidatePublication(c Configuration) []string {
+	if c.Data.Rules != nil {
+		return ValidateRulePublication(c)
+	}
 	errs := ValidateConfig(c)
 	if len(errs) != 0 {
 		return errs

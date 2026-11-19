@@ -1,0 +1,40 @@
+name: ctc-rules-test
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ctc_rules_test
+      POSTGRES_USER: ctc
+      POSTGRES_PASSWORD: isolated_rules_test_only
+    volumes:
+      - rules_test_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ctc -d ctc_rules_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  backend:
+    image: ctc-generator-backend:configurable-rules
+    environment:
+      APP_ENV: demo
+      APP_ORIGIN: http://localhost:3024
+      DATABASE_URL: postgres://ctc:isolated_rules_test_only@db:5432/ctc_rules_test?sslmode=disable
+    ports:
+      - "127.0.0.1:8094:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    init: true
+    shm_size: 256mb
+  frontend:
+    image: ctc-generator-frontend:configurable-rules
+    environment:
+      API_INTERNAL_URL: http://backend:8080
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      - "127.0.0.1:3024:3000"
+    depends_on:
+      - backend
+    init: true
+volumes:
+  rules_test_pgdata:

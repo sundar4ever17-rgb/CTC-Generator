@@ -45,7 +45,7 @@ export default function Home() {
       const b = await request<Bootstrap>("/bootstrap");
       if (epoch !== authEpoch.current) return;
       if (activeUser.current !== b.user.id) {
-        const first = (b.demo ? b.configurations.find(c => c.source === "urd-demo") : undefined) || b.configurations.find(c => c.status === "published" && c.source === "client") || b.configurations[0];
+        const first = (b.demo ? b.configurations.find(c => c.source === "urd-demo" && !c.data.rules) || b.configurations.find(c => c.source === "urd-demo") : undefined) || b.configurations.find(c => c.status === "published" && c.source === "client") || b.configurations[0];
         setInput({ ...structuredClone(b.demo && first?.source === "urd-demo" ? demoInput : emptyInput), gradeId: first?.data.grades[0]?.id || "", locationId: first?.data.locations[0]?.id || "" });
         setCaseId(undefined); setExpectedRevisionId(undefined); setConfigurationId(first?.id || "");
         setTab(b.user.role === "auditor" ? "records" : b.user.role === "admin" ? "users" : b.user.role === "cb" && !first ? "configuration" : "generate");

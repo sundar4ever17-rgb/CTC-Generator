@@ -9,14 +9,15 @@ REVOKE ALL ON SCHEMA public FROM :"app_role";
 GRANT USAGE ON SCHEMA public TO :"app_role";
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM :"app_role";
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM :"app_role";
-GRANT SELECT ON schema_migrations, salary_components, qualifications TO :"app_role";
+GRANT SELECT ON schema_migrations, qualifications TO :"app_role";
+GRANT SELECT, INSERT ON salary_components TO :"app_role";
 GRANT SELECT, UPDATE ON application_settings TO :"app_role";
 GRANT SELECT, INSERT, UPDATE ON users, candidates, ctc_cases TO :"app_role";
 GRANT SELECT, INSERT, UPDATE, DELETE ON sessions, auth_rate_limits TO :"app_role";
 GRANT SELECT, INSERT ON configurations TO :"app_role";
 GRANT UPDATE(status, published_at) ON configurations TO :"app_role";
 GRANT SELECT, INSERT ON
-    component_configurations, grade_salary_configurations,
+    component_configurations, group_configurations, configuration_rule_sets, grade_salary_configurations,
     location_configurations, professional_allowance_configurations,
     core_calculation_parameters, benefit_configurations, benefit_schedule_items,
     ctc_revisions, calculation_lines, document_template_versions,

@@ -15,3 +15,11 @@
 - Database changes use explicit transactional, checksummed migrations. Production startup verifies schema compatibility and restricted database privileges; it never provisions accounts or changes schema. One-time bootstrap is a separate operator command.
 - Engine version 1.2.0 distinguishes the stricter validations and corrected order-independent policy condition evaluation. Previously saved calculation snapshots and PDF bytes retain their original engine version and figures.
 - Final documents require complete approved configuration and valid candidate fields; production additionally checks dated client configuration and refuses legacy undated/demo issuance. Existing document bytes remain preserved.
+- Configuration format 2 uses a generic expression evaluator (engine 2.0.0), with
+  dynamic components, categories, conditions, inputs, and group targets. Legacy
+  configuration versions continue using engine 1.2.0. Conversion creates a new
+  draft and retains the existing URD 50:50 policy; changing that ratio is a
+  separate business-policy decision.
+- New rule storage extends the canonical configuration JSON with transactional
+  projections. Existing snapshots and PDF bytes are preserved. See
+  [configurable calculations](configurable-calculations.md) for usage and verification.

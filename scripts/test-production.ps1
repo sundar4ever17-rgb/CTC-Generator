@@ -83,6 +83,8 @@ CREATE DATABASE ctc_restore_test OWNER ctc_owner;
     if ($LASTEXITCODE -ne 0) { throw 'Production security acceptance failed.' }
     & docker @runner node:24 node /scripts/production-smoke.mjs pdf
     if ($LASTEXITCODE -ne 0) { throw 'Production sandboxed PDF generation failed.' }
+    & docker @runner node:24 node /tests/rules-api.mjs
+    if ($LASTEXITCODE -ne 0) { throw 'Configurable rules, runtime grants, revision preservation or final documents failed.' }
     & (Join-Path $PSScriptRoot 'backup-database.ps1') -ServiceFile (Join-Path $testRoot 'backup-service.conf') -CertificateFile (Join-Path $testRoot 'server.crt') -Destination (Join-Path $testRoot 'populated-backup') -DockerNetwork $state.Network
     $archive = (Get-ChildItem -LiteralPath (Join-Path $testRoot 'populated-backup') -Filter '*.dump' | Select-Object -First 1).FullName
     & (Join-Path $PSScriptRoot 'restore-database.ps1') -ServiceFile (Join-Path $testRoot 'restore-service.conf') -CertificateFile (Join-Path $testRoot 'server.crt') -Archive $archive -ExpectedDatabase ctc_restore_test -ConfirmRestoreToEmptyDatabase -DockerNetwork $state.Network

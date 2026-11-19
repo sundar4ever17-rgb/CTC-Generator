@@ -1,5 +1,7 @@
 package engine
 
+import "encoding/json"
+
 const Version = "1.2.0"
 
 type Configuration struct {
@@ -14,6 +16,7 @@ type Configuration struct {
 	CreatedAt     string     `json:"createdAt"`
 }
 type ConfigData struct {
+	Rules                  *RuleSet      `json:"rules,omitempty"`
 	AnnualSpecialGroup     string        `json:"annualSpecialGroup"`
 	Grades                 []Grade       `json:"grades"`
 	Locations              []Location    `json:"locations"`
@@ -95,22 +98,23 @@ type BenefitRule struct {
 	Notes       string         `json:"notes,omitempty"`
 }
 type Input struct {
-	CandidateName      string          `json:"candidateName"`
-	CandidateReference string          `json:"candidateReference"`
-	Designation        string          `json:"designation"`
-	Department         string          `json:"department"`
-	JoiningDate        string          `json:"joiningDate"`
-	CalculationDate    string          `json:"calculationDate,omitempty"`
-	LocationID         string          `json:"locationId"`
-	GradeID            string          `json:"gradeId"`
-	Qualification      string          `json:"qualification"`
-	Gross              string          `json:"gross"`
-	Basic              string          `json:"basic"`
-	TaxRegime          string          `json:"taxRegime"`
-	NPSOptIn           bool            `json:"npsOptIn"`
-	Job                map[string]bool `json:"job"`
-	CTCYear            int             `json:"ctcYear"`
-	Notes              string          `json:"notes"`
+	Custom             map[string]json.RawMessage `json:"custom,omitempty"`
+	CandidateName      string                     `json:"candidateName"`
+	CandidateReference string                     `json:"candidateReference"`
+	Designation        string                     `json:"designation"`
+	Department         string                     `json:"department"`
+	JoiningDate        string                     `json:"joiningDate"`
+	CalculationDate    string                     `json:"calculationDate,omitempty"`
+	LocationID         string                     `json:"locationId"`
+	GradeID            string                     `json:"gradeId"`
+	Qualification      string                     `json:"qualification"`
+	Gross              string                     `json:"gross"`
+	Basic              string                     `json:"basic"`
+	TaxRegime          string                     `json:"taxRegime"`
+	NPSOptIn           bool                       `json:"npsOptIn"`
+	Job                map[string]bool            `json:"job"`
+	CTCYear            int                        `json:"ctcYear"`
+	Notes              string                     `json:"notes"`
 }
 type Component struct {
 	Code  string `json:"code"`
@@ -170,15 +174,17 @@ type Totals struct {
 	VariableAnnual   *string `json:"variableAnnual"`
 }
 type Result struct {
-	Lines                []Line  `json:"lines"`
-	Totals               Totals  `json:"totals"`
-	CoreValid            bool    `json:"coreValid"`
-	Complete             bool    `json:"complete"`
-	CanFinalize          bool    `json:"canFinalize"`
-	Issues               []Issue `json:"issues"`
-	ConfigurationID      string  `json:"configurationId"`
-	ConfigurationVersion int     `json:"configurationVersion"`
-	EngineVersion        string  `json:"engineVersion"`
+	Groups               []GroupResult      `json:"groups,omitempty"`
+	Trace                []CalculationTrace `json:"trace,omitempty"`
+	Lines                []Line             `json:"lines"`
+	Totals               Totals             `json:"totals"`
+	CoreValid            bool               `json:"coreValid"`
+	Complete             bool               `json:"complete"`
+	CanFinalize          bool               `json:"canFinalize"`
+	Issues               []Issue            `json:"issues"`
+	ConfigurationID      string             `json:"configurationId"`
+	ConfigurationVersion int                `json:"configurationVersion"`
+	EngineVersion        string             `json:"engineVersion"`
 }
 
 func Str(s string) *string { return &s }

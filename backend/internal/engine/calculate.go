@@ -83,6 +83,9 @@ func jobField(s string) bool {
 }
 
 func ValidateConfig(c Configuration) []string {
+	if c.Data.Rules != nil {
+		return ValidateRuleConfiguration(c)
+	}
 	d := c.Data
 	var errs []string
 	add := func(s string) { errs = append(errs, s) }
@@ -253,6 +256,9 @@ func ValidateConfig(c Configuration) []string {
 }
 
 func Calculate(c Configuration, in Input) Result {
+	if c.Data.Rules != nil {
+		return CalculateRules(c, in)
+	}
 	out := Result{ConfigurationID: c.ID, ConfigurationVersion: c.Version, EngineVersion: Version, Lines: []Line{}, Issues: []Issue{}}
 	scale := c.Data.Rounding.Scale
 	if scale < 0 || scale > 2 {

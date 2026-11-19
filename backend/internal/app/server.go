@@ -183,6 +183,8 @@ func (a *App) Handler() http.Handler {
 	m.HandleFunc("GET /api/configurations", a.protect(a.listConfigs))
 	m.HandleFunc("GET /api/configurations/{id}", a.protect(a.getConfig))
 	m.HandleFunc("POST /api/configurations", a.protect(a.createConfig, "cb"))
+	m.HandleFunc("POST /api/configurations/convert", a.protect(a.convertConfig, "cb"))
+	m.HandleFunc("POST /api/configurations/preview", a.protect(a.previewConfig, "cb"))
 	m.HandleFunc("POST /api/configurations/{id}/publish", a.protect(a.publishConfig, "cb"))
 	m.HandleFunc("POST /api/calculate", a.protect(a.calculate, "hr", "cb", "admin"))
 	m.HandleFunc("GET /api/cases", a.protect(a.listCases))
